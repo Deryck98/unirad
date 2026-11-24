@@ -83,7 +83,7 @@ const TERMS = `<ul class="rules">
   <li><b>Nada de dados de pacientes:</b> não publique nomes, exames, laudos ou imagens. Isso é sigilo profissional e é protegido pela LGPD.</li>
   <li><b>Relate fatos, sem ofensa:</b> diga o que aconteceu (ex.: "salário de outubro atrasado"). Não xingue nem acuse sem prova.</li>
   <li><b>Documentos:</b> se mostrar contracheque ou comprovante, cubra dados que não sejam seus.</li>
-  <li><b>Sua carteira do CRTR</b> é usada só para confirmar que você é da categoria e não aparece para ninguém.</li>
+  <li><b>Seu número do CRTR</b> é usado só para confirmar que você é da categoria e não aparece para ninguém.</li>
   <li>Posts denunciados várias vezes são ocultados até revisão.</li>
   <li>O UniRad é um espaço de união da categoria e não substitui orientação de advogado ou do CRTR.</li></ul>`;
 
@@ -126,10 +126,6 @@ function screenSignup() {
         <div class="picked" id="picked">${pickedHtml()}</div>
         <div class="reglist" id="reglist">${regionListHtml()}</div>
       </div>
-      <label>Foto da carteira do CRTR
-        <span class="file">${ic('camera', 18)} <span id="fileName">Tirar foto ou escolher arquivo</span>
-        <input type="file" name="card" accept="image/*" capture="environment" required></span>
-        <span class="muted small">Só para confirmar. Ninguém vê e não aparece no seu perfil.</span></label>
       <label class="check"><input type="checkbox" name="anon" ${ui.anonDefault ? 'checked' : ''}><span>Postar como anônimo por padrão <span class="muted small">(você escolhe em cada post)</span></span></label>
       <label class="check"><input type="checkbox" name="terms" required><span>Li e aceito as <a href="#" data-action="show-terms">regras do UniRad</a></span></label>
       <div class="error" id="formError" role="alert"></div>
@@ -203,10 +199,10 @@ function screenProfile() {
     <div class="card"><div class="row gap8"><div class="avatar big">${ic('user', 26)}</div>
       <div><div class="name">${esc(u.name)}</div><div class="muted small">${esc(u.role)}</div></div></div>
       <div class="row between li"><span class="muted">Região</span><b>${esc(regionLabel(u.region))}</b></div>
-      <div class="row between li"><span class="muted">Status</span>${u.verified ? `<span class="ok">${ic('check', 16)} Profissional verificado</span>` : '<span class="warn">Em análise</span>'}</div>
+      <div class="row between li"><span class="muted">Status</span>${u.verified ? `<span class="ok">${ic('check', 16)} CRTR informado</span>` : '<span class="warn">Em análise</span>'}</div>
       <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Postar como anônimo por padrão</span></label>
     </div>
-    <p class="muted small">Seu número do CRTR e sua carteira não aparecem para ninguém.</p>
+    <p class="muted small">Seu número do CRTR não aparece para ninguém.</p>
     <button class="btn out" data-action="show-terms">Ver regras do UniRad</button>
     <button class="btn out danger" data-action="logout">Sair e apagar meus dados deste aparelho</button>
     ${CONFIG.demo ? '<p class="muted small center">Modo demonstração: os dados ficam só neste aparelho.</p>' : ''}
@@ -268,8 +264,6 @@ function render() {
 function bindSignup() {
   const s = document.getElementById('regionSearch');
   if (s) s.addEventListener('input', (e) => { ui.regionQuery = e.target.value; document.getElementById('reglist').innerHTML = regionListHtml(); });
-  const file = document.querySelector('input[name="card"]');
-  if (file) file.addEventListener('change', () => { document.getElementById('fileName').textContent = file.files[0] ? file.files[0].name : 'Tirar foto ou escolher arquivo'; });
 }
 function bindModal() {
   const c = document.getElementById('catSel');
@@ -315,10 +309,7 @@ document.addEventListener('submit', (ev) => {
     if (!/^[0-9A-Za-z.\-\/]{3,12}$/.test(crtr)) return err('Digite o número do CRTR (só números, 3 a 12 caracteres).');
     if (!d.get('role')) return err('Escolha sua função.');
     if (!ui.regionPick) return err('Escolha a região do seu CRTR.');
-    const card = d.get('card');
-    if (!card || !card.size) return err('Envie a foto da carteira do CRTR.');
     if (!d.get('terms')) return err('Aceite as regras para continuar.');
-    /* A foto NÃO é guardada na demonstração. Em produção, enviar a um armazenamento privado só para conferência. */
     Store.signup({ name, crtr, role: String(d.get('role')), region: ui.regionPick, anon: !!d.get('anon') });
     ui.tab = 'inicio'; ui.view = 'mine';
     render(); window.scrollTo(0, 0); return;
