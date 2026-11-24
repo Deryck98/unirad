@@ -1,4 +1,5 @@
 import { CONFIG, REGIONS, DELAY_TYPES, regionLabel, Store } from './data.js';
+import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: true };
@@ -14,8 +15,7 @@ const ago = (t) => {
   if (h < 24) return `há ${h} h`;
   return `há ${Math.floor(h / 24)} d`;
 };
-const TREFOIL = 'M50,50 L30.00,15.36 A40,40 0 0 1 70.00,15.36 Z M50,50 L90.00,50.00 A40,40 0 0 1 70.00,84.64 Z M50,50 L30.00,84.64 A40,40 0 0 1 10.00,50.00 Z';
-const logo = (s = 36) => `<svg width="${s}" height="${s}" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#0b1f3a"/><path d="${TREFOIL}" fill="#f5b301"/><circle cx="50" cy="50" r="9" fill="#0b1f3a"/><circle cx="50" cy="50" r="5.5" fill="#f5b301"/></svg>`;
+const logo = (s = 36) => emblem({ size: s, text: false });
 const ICONS = {
   home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -90,7 +90,7 @@ const TERMS = `<ul class="rules">
 /* ---------- telas ---------- */
 function screenWelcome() {
   return `<main class="welcome">
-    <div class="wlogo">${logo(84)}</div>
+    <div class="wlogo">${emblem({ size: 190, text: true })}</div>
     <h1>UniRad</h1>
     <p class="lead">${CONFIG.tagline}</p>
     <p class="muted center">A rede dos técnicos e tecnólogos em radiologia. Aqui a gente se une, mostra a realidade da categoria e luta por piso, jornada e salário em dia.</p>
@@ -335,5 +335,21 @@ document.addEventListener('submit', (ev) => {
   }
 });
 
+function showSplash() {
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const el = document.createElement('div');
+  el.className = 'splash';
+  el.innerHTML = emblem({ size: 300, text: true, anim: !reduce }) + '<div class="sname">UniRad</div><div class="stag">' + CONFIG.tagline + '</div>';
+  if (reduce) el.querySelectorAll('.sname,.stag').forEach((n) => { n.style.opacity = 1; n.style.animation = 'none'; });
+  document.body.appendChild(el);
+  const svg = el.querySelector('svg');
+  if (!reduce) startSmil(svg);
+  let done = false;
+  const close = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => el.remove(), 500); };
+  el.addEventListener('click', close);
+  setTimeout(close, reduce ? 1200 : 4700);
+}
+
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 render();
+showSplash();

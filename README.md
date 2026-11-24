@@ -8,6 +8,7 @@ A força da radiologia unida. Rede dos técnicos e tecnólogos em radiologia par
 - Mural de atrasos (relato anônimo ou com nome, sem expor local com poucos relatos)
 - Comunidade com publicações, comentários, vagas e cursos
 - Aba de direitos e regras de uso (sem dados de pacientes)
+- Abertura animada com o símbolo oficial da radiologia se montando (toque para pular)
 - PWA: instala no iPhone, Android e notebook; funciona offline
 
 ## Estado atual: demonstração
