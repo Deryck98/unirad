@@ -1,8 +1,10 @@
-import { CONFIG, REGIONS, DELAY_TYPES, regionLabel, Store } from './data.js';
+import { CONFIG, REGIONS, DELAY_TYPES, regionLabel } from './data.js';
+import { connect } from './store.js';
 import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: true };
+let Store = null;
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: true, user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -36,15 +38,14 @@ const ICONS = {
 const ic = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
 const CATS = { geral: 'Geral', vagas: 'Vagas', cursos: 'Cursos' };
 
-const scopeOf = (v) => (v === 'mine' ? Store.user.region : v === 'brasil' ? 'brasil' : Number(v));
-const viewName = (v) => (v === 'mine' ? regionLabel(Store.user.region).split(' · ')[0] : v === 'brasil' ? 'Brasil todo' : regionLabel(v).split(' · ')[0]);
-const authorName = (anon) => (anon ? 'Profissional anônimo' : Store.user.name);
+const scopeOf = (v) => (v === 'mine' ? ui.user.region : v === 'brasil' ? 'brasil' : Number(v));
+const viewName = (v) => (v === 'mine' ? regionLabel(ui.user.region).split(' · ')[0] : v === 'brasil' ? 'Brasil todo' : regionLabel(v).split(' · ')[0]);
 
 /* ---------- componentes ---------- */
 function viewSwitch() {
-  const other = REGIONS.filter((r) => r.id !== Store.user.region)
+  const other = REGIONS.filter((r) => r.id !== ui.user.region)
     .map((r) => `<option value="${r.id}" ${String(ui.view) === String(r.id) ? 'selected' : ''}>${esc(r.name)}${r.states ? ' · ' + esc(r.states) : ''}</option>`).join('');
-  const isOther = typeof ui.view === 'number' || /^\d+$/.test(String(ui.view));
+  const isOther = /^\d+$/.test(String(ui.view));
   return `<div class="switch">
     <button class="seg ${ui.view === 'mine' ? 'on' : ''}" data-action="view" data-v="mine">Minha região</button>
     <button class="seg ${ui.view === 'brasil' ? 'on' : ''}" data-action="view" data-v="brasil">Brasil todo</button>
@@ -53,7 +54,6 @@ function viewSwitch() {
 }
 
 function postCard(p) {
-  const liked = p.likedBy.includes(Store.user.id);
   const open = ui.open[p.id];
   return `<article class="card post">
     <div class="row between">
@@ -65,9 +65,9 @@ function postCard(p) {
     <p class="body">${esc(p.text).replace(/\n/g, '<br>')}</p>
     ${p.place || p.salary ? `<div class="meta">${p.place ? `<span>${ic('briefcase', 14)} ${esc(p.place)}</span>` : ''}${p.salary ? `<span>Salário: ${esc(p.salary)}</span>` : ''}</div>` : ''}
     <div class="row gap16 act">
-      <button class="ghost ${liked ? 'liked' : ''}" data-action="like" data-id="${p.id}" aria-label="Curtir">${ic('heart', 18)} ${p.likes}</button>
+      <button class="ghost ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}" aria-label="Curtir">${ic('heart', 18)} ${p.likes}</button>
       <button class="ghost" data-action="toggle-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 18)} ${p.comments.length}</button>
-      <button class="ghost right" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 16)}</button>
+      ${p.mine ? `<button class="ghost right" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button>` : `<button class="ghost right" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 16)}</button>`}
     </div>
     ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
       <form class="row gap8" data-form="comment" data-id="${p.id}"><input name="t" maxlength="300" placeholder="Escreva um comentário" required autocomplete="off"><button class="btn small" type="submit">Enviar</button></form></div>` : ''}
@@ -83,9 +83,12 @@ const TERMS = `<ul class="rules">
   <li><b>Nada de dados de pacientes:</b> não publique nomes, exames, laudos ou imagens. Isso é sigilo profissional e é protegido pela LGPD.</li>
   <li><b>Relate fatos, sem ofensa:</b> diga o que aconteceu (ex.: "salário de outubro atrasado"). Não xingue nem acuse sem prova.</li>
   <li><b>Documentos:</b> se mostrar contracheque ou comprovante, cubra dados que não sejam seus.</li>
-  <li><b>Seu número do CRTR</b> é usado só para confirmar que você é da categoria e não aparece para ninguém.</li>
-  <li>Posts denunciados várias vezes são ocultados até revisão.</li>
+  <li><b>Seu número do CRTR, e-mail e senha</b> ficam em sigilo e não aparecem para ninguém. Em posts anônimos, nem o seu nome aparece.</li>
+  <li>Posts denunciados por várias pessoas são ocultados.</li>
+  <li>Você pode apagar sua conta e seus dados quando quiser, no Perfil.</li>
   <li>O UniRad é um espaço de união da categoria e não substitui orientação de advogado ou do CRTR.</li></ul>`;
+
+const loadingBox = '<div class="center muted pad8" role="status">Carregando…</div>';
 
 /* ---------- telas ---------- */
 function screenWelcome() {
@@ -99,8 +102,22 @@ function screenWelcome() {
       <li>${ic('check', 20)} Relatos de atraso, anônimos se quiser</li>
       <li>${ic('check', 20)} Sua região e o Brasil todo</li>
     </ul>
-    <button class="btn big" data-action="go-signup">Entrar no UniRad</button>
-    ${CONFIG.demo ? '<p class="muted small center">Versão de demonstração: os dados ficam só neste aparelho.</p>' : ''}
+    <button class="btn big" data-action="go-signup">Criar meu cadastro</button>
+    ${Store.mode === 'api' ? '<button class="btn out" data-action="go-login">Já tenho conta</button>' : ''}
+    ${Store.mode === 'demo' ? '<p class="muted small center">Versão de demonstração: os dados ficam só neste aparelho.</p>' : ''}
+  </main>`;
+}
+
+function screenLogin() {
+  return `<main class="pad">
+    <button class="ghost back" data-action="go-welcome">← Voltar</button>
+    <h2>Entrar</h2>
+    <form data-form="login" novalidate>
+      <label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
+      <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
+      <div class="error" id="formError" role="alert"></div>
+      <button class="btn big" type="submit">Entrar</button>
+    </form>
   </main>`;
 }
 
@@ -118,6 +135,8 @@ function screenSignup() {
     <p class="muted">Só profissionais da radiologia. Leva 1 minuto.</p>
     <form data-form="signup" novalidate>
       <label>Nome completo<input name="name" autocomplete="name" required minlength="5" placeholder="Seu nome"></label>
+      <label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
+      <label>Senha<input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="Mínimo 8 caracteres"></label>
       <label>Número do CRTR<input name="crtr" inputmode="numeric" required placeholder="Ex.: 12345" maxlength="12"></label>
       <label>Função
         <select name="role" required><option value="">Selecione</option><option>Técnico em Radiologia</option><option>Tecnólogo em Radiologia</option></select></label>
@@ -135,47 +154,37 @@ function screenSignup() {
 }
 
 function screenHome() {
-  const s = scopeOf(ui.view);
-  const delays = Store.delays(s);
-  const total = delays.length;
-  const withDays = delays.filter((d) => d.type === 'Salário atrasado' && d.days > 0);
-  const avg = withDays.length ? Math.round(withDays.reduce((a, d) => a + d.days, 0) / withDays.length) : 0;
-  const byHosp = {};
-  delays.forEach((d) => { const k = d.hospital.trim(); if (k) byHosp[k] = (byHosp[k] || 0) + 1; });
-  const top = Object.entries(byHosp).filter(([, n]) => n >= CONFIG.hideHospitalBelow).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const members = Store.memberCount(s === 'brasil' ? null : s);
-  const nat = Store.memberCount(null);
-  const pct = Math.min(100, Math.round((nat / CONFIG.goalMembers) * 100));
-  const recent = Store.posts({ scope: s }).slice(0, 2);
+  if (!ui.stats || !ui.posts) return `<main class="pad">${viewSwitch()}${loadingBox}</main>`;
+  const { members, national, delays } = ui.stats;
+  const pct = Math.min(100, Math.round((national / CONFIG.goalMembers) * 100));
+  const recent = ui.posts.slice(0, 2);
   return `<main class="pad">
     ${viewSwitch()}
     <section class="hero">
       <div class="small">Profissionais unidos · ${esc(viewName(ui.view))}</div>
       <div class="big-n">${members.toLocaleString('pt-BR')}</div>
-      <div class="small">Meta do Brasil: ${CONFIG.goalMembers.toLocaleString('pt-BR')} (${nat.toLocaleString('pt-BR')} hoje)</div>
+      <div class="small">Meta do Brasil: ${CONFIG.goalMembers.toLocaleString('pt-BR')} (${national.toLocaleString('pt-BR')} hoje)</div>
       <div class="bar"><i style="width:${pct}%"></i></div>
     </section>
     <h3 class="sec">Mural de atrasos</h3>
     <div class="grid2">
-      <div class="stat red"><div class="small">Relatos</div><div class="n">${total}</div></div>
-      <div class="stat amber"><div class="small">Atraso médio</div><div class="n">${avg ? avg + ' dias' : '—'}</div></div>
+      <div class="stat red"><div class="small">Relatos</div><div class="n">${delays.total}</div></div>
+      <div class="stat amber"><div class="small">Atraso médio</div><div class="n">${delays.avgDays ? delays.avgDays + ' dias' : '—'}</div></div>
     </div>
-    ${top.length ? `<div class="card"><div class="small muted">Locais mais citados</div>${top.map(([h, n]) => `<div class="row between li"><span>${esc(h)}</span><b>${n} relatos</b></div>`).join('')}</div>`
+    ${delays.top.length ? `<div class="card"><div class="small muted">Locais mais citados</div>${delays.top.map((t) => `<div class="row between li"><span>${esc(t.hospital)}</span><b>${t.n} relatos</b></div>`).join('')}</div>`
       : `<p class="muted small">Locais aparecem aqui quando houver ao menos ${CONFIG.hideHospitalBelow} relatos sobre o mesmo, para proteger quem relata.</p>`}
     <button class="btn big" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>
     <h3 class="sec">Na comunidade</h3>
-    ${recent.map(postCard).join('') || '<p class="muted">Ainda não há publicações aqui.</p>'}
+    ${recent.map(postCard).join('') || '<p class="muted">Ainda não há publicações aqui. Seja o primeiro.</p>'}
   </main>`;
 }
 
 function screenFeed() {
-  const s = scopeOf(ui.view);
-  const posts = Store.posts({ scope: s, cat: ui.cat });
   return `<main class="pad">
     ${viewSwitch()}
     <div class="chips">${['tudo', 'geral', 'vagas', 'cursos'].map((c) => `<button class="chip btnchip ${ui.cat === c ? 'on' : ''}" data-action="cat" data-c="${c}">${c === 'tudo' ? 'Tudo' : CATS[c]}</button>`).join('')}</div>
     <button class="btn big" data-action="new-post">${ic('plus', 18)} Nova publicação</button>
-    ${posts.map(postCard).join('') || '<p class="muted center pad8">Nada por aqui ainda. Seja o primeiro a publicar.</p>'}
+    ${!ui.posts ? loadingBox : ui.posts.map(postCard).join('') || '<p class="muted center pad8">Nada por aqui ainda. Seja o primeiro a publicar.</p>'}
   </main>`;
 }
 
@@ -194,33 +203,32 @@ function screenRights() {
 }
 
 function screenProfile() {
-  const u = Store.user;
+  const u = ui.user;
   return `<main class="pad"><h2>Perfil</h2>
     <div class="card"><div class="row gap8"><div class="avatar big">${ic('user', 26)}</div>
       <div><div class="name">${esc(u.name)}</div><div class="muted small">${esc(u.role)}</div></div></div>
       <div class="row between li"><span class="muted">Região</span><b>${esc(regionLabel(u.region))}</b></div>
-      <div class="row between li"><span class="muted">Status</span>${u.verified ? `<span class="ok">${ic('check', 16)} CRTR informado</span>` : '<span class="warn">Em análise</span>'}</div>
       <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Postar como anônimo por padrão</span></label>
     </div>
-    <p class="muted small">Seu número do CRTR não aparece para ninguém.</p>
+    <p class="muted small">Seu número do CRTR, e-mail e senha não aparecem para ninguém.</p>
     <button class="btn out" data-action="show-terms">Ver regras do UniRad</button>
-    <button class="btn out danger" data-action="logout">Sair e apagar meus dados deste aparelho</button>
-    ${CONFIG.demo ? '<p class="muted small center">Modo demonstração: os dados ficam só neste aparelho.</p>' : ''}
+    <button class="btn out" data-action="logout">Sair</button>
+    <button class="btn out danger" data-action="ask-delete">Apagar minha conta e meus dados</button>
+    ${Store.mode === 'demo' ? '<p class="muted small center">Modo demonstração: os dados ficam só neste aparelho.</p>' : ''}
   </main>`;
 }
 
 function modalDelay() {
   const months = [];
   const d = new Date();
-  for (let i = 0; i < 4; i++) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); months.push(x); }
+  for (let i = 0; i < 4; i++) months.push(new Date(d.getFullYear(), d.getMonth() - i, 1));
   const mname = (x) => x.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   return sheet('Relatar atraso', `<form data-form="delay" novalidate>
     <label>Hospital ou clínica<input name="hospital" required maxlength="80" placeholder="Nome do local"></label>
     <label>O que aconteceu<select name="type">${DELAY_TYPES.map((t) => `<option>${esc(t)}</option>`).join('')}</select></label>
     <label>Mês de referência<select name="month">${months.map((x) => `<option value="${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}">${esc(mname(x))}</option>`).join('')}</select></label>
     <label>Dias de atraso (se souber)<input name="days" type="number" min="0" max="365" inputmode="numeric" placeholder="0"></label>
-    <label class="check"><input type="checkbox" name="anon" ${Store.user.anon ? 'checked' : ''}><span>Relatar como anônimo</span></label>
-    <p class="muted small">Relate só fatos. Nada de dados de pacientes.</p>
+    <p class="muted small">Seu relato aparece só somado aos outros, sem seu nome. Relate só fatos e nada de dados de pacientes.</p>
     <div class="error" id="formError" role="alert"></div>
     <button class="btn big" type="submit">Enviar relato</button></form>`);
 }
@@ -234,10 +242,18 @@ function modalPost() {
       <label>Salário<input name="salary" maxlength="30" placeholder="Ex.: R$ 3.500"></label>
     </div>
     <label>Onde aparece<select name="scope"><option value="regiao">Só na minha região</option><option value="brasil">Brasil todo</option></select></label>
-    <label class="check"><input type="checkbox" name="anon" ${Store.user.anon ? 'checked' : ''}><span>Publicar como anônimo</span></label>
+    <label class="check"><input type="checkbox" name="anon" ${ui.user.anon ? 'checked' : ''}><span>Publicar como anônimo</span></label>
     <p class="muted small">Não publique dados de pacientes, exames ou imagens.</p>
     <div class="error" id="formError" role="alert"></div>
     <button class="btn big" type="submit">Publicar</button></form>`);
+}
+
+function modalDeleteAccount() {
+  return sheet('Apagar minha conta', `<form data-form="delete" novalidate>
+    <p>Isso apaga sua conta, suas publicações, comentários e relatos. Não dá para desfazer.</p>
+    ${Store.mode === 'api' ? '<label>Digite sua senha<input name="password" type="password" autocomplete="current-password" required></label>' : ''}
+    <div class="error" id="formError" role="alert"></div>
+    <button class="btn big danger" type="submit">Apagar tudo</button></form>`);
 }
 
 /* ---------- render ---------- */
@@ -250,15 +266,48 @@ function header() {
 }
 
 function render() {
-  if (!Store.user) {
-    $app.innerHTML = ui.screen === 'signup' ? screenSignup() : screenWelcome();
+  if (!ui.user) {
+    $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
     return;
   }
   const body = { inicio: screenHome, comunidade: screenFeed, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
+}
+
+/* Carrega os dados da tela atual no servidor e redesenha. */
+async function refresh({ quiet = false } = {}) {
+  if (!ui.user) return;
+  const seq = ++ui.seq;
+  if (!quiet) { ui.stats = null; ui.posts = null; render(); }
+  const scope = scopeOf(ui.view);
+  try {
+    if (ui.tab === 'inicio') {
+      const [stats, posts] = await Promise.all([Store.stats(scope), Store.posts({ scope, cat: 'tudo' })]);
+      if (seq !== ui.seq) return;
+      ui.stats = stats; ui.posts = posts;
+    } else if (ui.tab === 'comunidade') {
+      const posts = await Store.posts({ scope, cat: ui.cat });
+      if (seq !== ui.seq) return;
+      ui.posts = posts;
+    } else { return render(); }
+  } catch (e) {
+    if (seq !== ui.seq) return;
+    if (/Entre para continuar/.test(e.message)) { ui.user = null; ui.screen = 'login'; return render(); }
+    ui.stats = ui.stats || { members: 0, national: 0, delays: { total: 0, avgDays: 0, top: [] } };
+    ui.posts = ui.posts || [];
+    toast(e.message);
+  }
+  render();
+}
+
+function toast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = msg; t.className = 'show';
+  clearTimeout(toast.h); toast.h = setTimeout(() => { t.className = ''; }, 3500);
 }
 
 function bindSignup() {
@@ -270,70 +319,119 @@ function bindModal() {
   if (c) c.addEventListener('change', () => { document.getElementById('vagaExtra').hidden = c.value !== 'vagas'; });
 }
 const err = (m) => { const e = document.getElementById('formError'); if (e) e.textContent = m; };
+const busy = (f, on) => { const b = f.querySelector('button[type=submit]'); if (b) { b.disabled = on; b.style.opacity = on ? '.6' : ''; } };
 
 /* ---------- eventos ---------- */
-document.addEventListener('click', (ev) => {
+document.addEventListener('click', async (ev) => {
   const el = ev.target.closest('[data-action]');
   if (!el) return;
   const a = el.dataset.action;
-  if (a === 'close-modal') { if (ev.target.closest('[data-stop]') && el.dataset.action === 'close-modal' && !ev.target.closest('button[data-action="close-modal"]')) return; if (!Store.user) { document.getElementById('modalRoot').innerHTML = ''; return; } ui.modal = null; return render(); }
-  if (a === 'show-terms') { ev.preventDefault(); if (!Store.user) { document.getElementById('modalRoot').innerHTML = sheet('Regras do UniRad', TERMS); return; } ui.modal = 'terms'; return render(); }
-  if (a === 'go-signup') { ui.screen = 'signup'; return render(); }
-  if (a === 'go-welcome') { ui.screen = 'welcome'; return render(); }
-  if (a === 'pick-region') { ui.regionPick = Number(el.dataset.id); document.getElementById('picked').innerHTML = pickedHtml(); document.getElementById('reglist').innerHTML = regionListHtml(); return; }
-  if (a === 'tab') { ui.tab = el.dataset.t; render(); window.scrollTo(0, 0); return; }
-  if (a === 'view') { ui.view = el.dataset.v; return render(); }
-  if (a === 'cat') { ui.cat = el.dataset.c; return render(); }
-  if (a === 'new-delay') { ui.modal = 'delay'; return render(); }
-  if (a === 'new-post') { ui.modal = 'post'; return render(); }
-  if (a === 'like') { Store.toggleLike(el.dataset.id); return render(); }
-  if (a === 'toggle-comments') { ui.open[el.dataset.id] = !ui.open[el.dataset.id]; return render(); }
-  if (a === 'report') { if (confirm('Denunciar esta publicação por ofensa ou dados de paciente?')) { Store.report(el.dataset.id); render(); } return; }
-  if (a === 'logout') { if (confirm('Sair e apagar seus dados deste aparelho?')) { Store.reset(); Store.logout(); ui.screen = 'welcome'; ui.regionPick = null; ui.regionQuery = ''; render(); } return; }
+  try {
+    if (a === 'close-modal') {
+      if (ev.target.closest('[data-stop]') && !ev.target.closest('button[data-action="close-modal"]')) return;
+      if (!ui.user) { document.getElementById('modalRoot').innerHTML = ''; return; }
+      ui.modal = null; return render();
+    }
+    if (a === 'show-terms') { ev.preventDefault(); if (!ui.user) { document.getElementById('modalRoot').innerHTML = sheet('Regras do UniRad', TERMS); return; } ui.modal = 'terms'; return render(); }
+    if (a === 'go-signup') { ui.screen = 'signup'; return render(); }
+    if (a === 'go-login') { ui.screen = 'login'; return render(); }
+    if (a === 'go-welcome') { ui.screen = 'welcome'; return render(); }
+    if (a === 'pick-region') { ui.regionPick = Number(el.dataset.id); document.getElementById('picked').innerHTML = pickedHtml(); document.getElementById('reglist').innerHTML = regionListHtml(); return; }
+    if (a === 'tab') { ui.tab = el.dataset.t; ui.modal = null; window.scrollTo(0, 0); return refresh(); }
+    if (a === 'view') { ui.view = el.dataset.v; return refresh(); }
+    if (a === 'cat') { ui.cat = el.dataset.c; return refresh({ quiet: true }); }
+    if (a === 'new-delay') { ui.modal = 'delay'; return render(); }
+    if (a === 'new-post') { ui.modal = 'post'; return render(); }
+    if (a === 'ask-delete') { ui.modal = 'delete'; return render(); }
+    if (a === 'like') { await Store.toggleLike(el.dataset.id); return refresh({ quiet: true }); }
+    if (a === 'toggle-comments') { ui.open[el.dataset.id] = !ui.open[el.dataset.id]; return render(); }
+    if (a === 'report') { if (confirm('Denunciar esta publicação por ofensa ou dados de paciente?')) { await Store.report(el.dataset.id); toast('Denúncia enviada. Obrigado.'); refresh({ quiet: true }); } return; }
+    if (a === 'delete-post') { if (confirm('Apagar sua publicação?')) { await Store.deletePost(el.dataset.id); refresh({ quiet: true }); } return; }
+    if (a === 'logout') { await Store.logout(); resetSession(); return render(); }
+  } catch (e) { toast(e.message); }
 });
-document.addEventListener('change', (ev) => {
+
+function resetSession() {
+  ui.user = null; ui.screen = 'welcome'; ui.regionPick = null; ui.regionQuery = ''; ui.modal = null; ui.tab = 'inicio'; ui.view = 'mine'; ui.stats = null; ui.posts = null;
+}
+
+document.addEventListener('change', async (ev) => {
   const el = ev.target;
-  if (el.dataset.action === 'view-select') { if (el.value) { ui.view = Number(el.value); render(); } }
-  if (el.dataset.action === 'toggle-anon') { Store.updateUser({ anon: el.checked }); }
+  if (el.dataset.action === 'view-select' && el.value) { ui.view = Number(el.value); refresh(); }
+  if (el.dataset.action === 'toggle-anon') {
+    try { await Store.setAnon(el.checked); ui.user.anon = el.checked; } catch (e) { el.checked = !el.checked; toast(e.message); }
+  }
 });
-document.addEventListener('submit', (ev) => {
+
+document.addEventListener('submit', async (ev) => {
   const f = ev.target.closest('form[data-form]');
   if (!f) return;
   ev.preventDefault();
   const kind = f.dataset.form;
   const d = new FormData(f);
-  if (kind === 'signup') {
-    const name = String(d.get('name') || '').trim();
-    const crtr = String(d.get('crtr') || '').trim();
-    if (name.length < 5) return err('Digite seu nome completo.');
-    if (!/^[0-9A-Za-z.\-\/]{3,12}$/.test(crtr)) return err('Digite o número do CRTR (só números, 3 a 12 caracteres).');
-    if (!d.get('role')) return err('Escolha sua função.');
-    if (!ui.regionPick) return err('Escolha a região do seu CRTR.');
-    if (!d.get('terms')) return err('Aceite as regras para continuar.');
-    Store.signup({ name, crtr, role: String(d.get('role')), region: ui.regionPick, anon: !!d.get('anon') });
-    ui.tab = 'inicio'; ui.view = 'mine';
-    render(); window.scrollTo(0, 0); return;
-  }
-  if (kind === 'delay') {
-    const hospital = String(d.get('hospital') || '').trim();
-    if (!hospital) return err('Informe o hospital ou a clínica.');
-    Store.addDelay({ region: Store.user.region, hospital, type: String(d.get('type')), month: String(d.get('month')), days: Math.max(0, Number(d.get('days')) || 0), anon: !!d.get('anon') });
-    ui.modal = null; return render();
-  }
-  if (kind === 'post') {
-    const text = String(d.get('text') || '').trim();
-    if (text.length < 3) return err('Escreva algo na publicação.');
-    const cat = String(d.get('cat'));
-    const anon = !!d.get('anon');
-    Store.addPost({ cat, scope: String(d.get('scope')), region: Store.user.region, anon, author: authorName(anon), text, place: cat === 'vagas' ? String(d.get('place') || '').trim() : '', salary: cat === 'vagas' ? String(d.get('salary') || '').trim() : '' });
-    ui.modal = null; ui.tab = 'comunidade'; return render();
-  }
-  if (kind === 'comment') {
-    const t = String(d.get('t') || '').trim(); if (!t) return;
-    Store.addComment(f.dataset.id, t, authorName(Store.user.anon));
-    return render();
-  }
+  err('');
+  try {
+    if (kind === 'signup') {
+      const name = String(d.get('name') || '').trim();
+      const email = String(d.get('email') || '').trim();
+      const password = String(d.get('password') || '');
+      const crtr = String(d.get('crtr') || '').trim();
+      if (name.length < 5) return err('Digite seu nome completo.');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return err('Digite um e-mail válido.');
+      if (password.length < 8) return err('A senha precisa ter pelo menos 8 caracteres.');
+      if (!/^[0-9A-Za-z.\-/]{3,12}$/.test(crtr)) return err('Digite o número do CRTR (3 a 12 caracteres).');
+      if (!d.get('role')) return err('Escolha sua função.');
+      if (!ui.regionPick) return err('Escolha a região do seu CRTR.');
+      if (!d.get('terms')) return err('Aceite as regras para continuar.');
+      busy(f, true);
+      try { ui.user = await Store.signup({ name, email, password, crtr, role: String(d.get('role')), region: ui.regionPick, anon: !!d.get('anon') }); }
+      finally { busy(f, false); }
+      ui.tab = 'inicio'; ui.view = 'mine'; window.scrollTo(0, 0);
+      return refresh();
+    }
+    if (kind === 'login') {
+      busy(f, true);
+      try { ui.user = await Store.login(String(d.get('email') || '').trim(), String(d.get('password') || '')); }
+      finally { busy(f, false); }
+      ui.tab = 'inicio'; ui.view = 'mine';
+      return refresh();
+    }
+    if (kind === 'delay') {
+      const hospital = String(d.get('hospital') || '').trim();
+      if (!hospital) return err('Informe o hospital ou a clínica.');
+      busy(f, true);
+      try { await Store.addDelay({ hospital, type: String(d.get('type')), month: String(d.get('month')), days: Math.max(0, Number(d.get('days')) || 0) }); }
+      finally { busy(f, false); }
+      ui.modal = null; toast('Relato enviado.');
+      return refresh();
+    }
+    if (kind === 'post') {
+      const text = String(d.get('text') || '').trim();
+      if (text.length < 3) return err('Escreva algo na publicação.');
+      const cat = String(d.get('cat'));
+      busy(f, true);
+      try {
+        await Store.addPost({ cat, scope: String(d.get('scope')), anon: !!d.get('anon'), text, place: cat === 'vagas' ? String(d.get('place') || '').trim() : '', salary: cat === 'vagas' ? String(d.get('salary') || '').trim() : '' });
+      } finally { busy(f, false); }
+      ui.modal = null; ui.tab = 'comunidade'; ui.cat = 'tudo';
+      return refresh();
+    }
+    if (kind === 'comment') {
+      const t = String(d.get('t') || '').trim(); if (!t) return;
+      await Store.addComment(f.dataset.id, t, ui.user.anon);
+      return refresh({ quiet: true });
+    }
+    if (kind === 'delete') {
+      busy(f, true);
+      try { await Store.deleteAccount(String(d.get('password') || '')); }
+      finally { busy(f, false); }
+      resetSession(); toast('Conta apagada.');
+      return render();
+    }
+  } catch (e) { err(e.message); toast(e.message); }
 });
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 function showSplash() {
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -350,6 +448,9 @@ function showSplash() {
   setTimeout(close, reduce ? 1200 : 4700);
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
-render();
-showSplash();
+(async function start() {
+  showSplash();
+  Store = await connect();
+  try { ui.user = await Store.init(); } catch { ui.user = null; }
+  if (ui.user) await refresh(); else render();
+})();

@@ -83,7 +83,7 @@ function load() {
 let db = load();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* ignora */ } };
 
-export const Store = {
+export const LocalStore = {
   get user() { return db.user; },
   signup(data) {
     const user = { id: uid(), ...data, verified: CONFIG.demo, createdAt: now() };

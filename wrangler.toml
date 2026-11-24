@@ -1,0 +1,14 @@
+name = "unirad"
+main = "worker/index.js"
+compatibility_date = "2026-11-01"
+
+[assets]
+directory = "."
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "unirad-db"
+database_id = "20256723-3cd4-4ac0-b26e-c9e0a11e10a8"
+migrations_dir = "migrations"
