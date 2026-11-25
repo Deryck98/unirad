@@ -21,6 +21,8 @@ const logo = (s = 36) => emblem({ size: s, text: false });
 const ICONS = {
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
@@ -815,7 +817,7 @@ function nav() {
   return `<nav class="nav">${t('inicio', 'home', 'Início')}${t('atrasos', 'alert', 'Atrasos')}<button class="navplus" data-action="new-post" aria-label="Nova publicação">${ic('plus', 26)}</button>${t('direitos', 'shield', 'Direitos')}${t('perfil', 'user', 'Perfil')}</nav>`;
 }
 function header() {
-  return `<header class="top"><div class="row gap8">${logo(30)}<b class="brand">UniRad</b></div><div class="row gap8">${Store.mode === 'api' ? `<button class="ghost bell" data-action="open-notifs" aria-label="Avisos">${ic('bell', 24)}<span class="bbadge" id="bbadge" ${ui.user.unread ? '' : 'hidden'}>${ui.user.unread > 9 ? '9+' : ui.user.unread || ''}</span></button>` : ''}<button class="ghost" data-action="invite" aria-label="Convidar colegas">${ic('share', 22)}</button></div></header>`;
+  return `<header class="top"><div class="row gap8">${logo(30)}<b class="brand">UniRad</b></div><div class="row gap8"><button class="ghost bell" data-action="quick-theme" aria-label="${document.documentElement.dataset.theme === 'dark' ? 'Mudar para modo claro' : 'Mudar para modo escuro'}">${ic(document.documentElement.dataset.theme === 'dark' ? 'sun' : 'moon', 24)}</button>${Store.mode === 'api' ? `<button class="ghost bell" data-action="open-notifs" aria-label="Avisos">${ic('bell', 24)}<span class="bbadge" id="bbadge" ${ui.user.unread ? '' : 'hidden'}>${ui.user.unread > 9 ? '9+' : ui.user.unread || ''}</span></button>` : ''}<button class="ghost" data-action="invite" aria-label="Convidar colegas">${ic('share', 22)}</button></div></header>`;
 }
 /* ---- botão voltar do celular: volta uma tela dentro do app ---- */
 const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignorado */ } };
@@ -1024,6 +1026,7 @@ document.addEventListener('click', async (ev) => {
       if (ui.tab === 'inicio' && ui.view === 'seguindo') refresh({ quiet: true });
       return;
     }
+    if (a === 'quick-theme') { const next = document.documentElement.dataset.theme === 'dark' ? 'claro' : 'escuro'; try { localStorage.setItem(THEME_KEY, next); } catch { /* ignorado */ } applyTheme(); return render(); }
     if (a === 'theme') { try { localStorage.setItem(THEME_KEY, el.dataset.v); } catch { /* ignorado */ } applyTheme(); return render(); }
     if (a === 'asort') { ui.asort = el.dataset.v; return render(); }
     if (a === 'atab') { ui.atab = el.dataset.v; return render(); }
