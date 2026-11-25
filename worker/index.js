@@ -1,3 +1,4 @@
+import { notify, textFor, getVapid } from './notify.js';
 /* UniRad - API (Cloudflare Worker + D1). Sem dependências. */
 
 const DAY = 86400000;
@@ -153,6 +154,8 @@ async function deleteAccount(req, env, user) {
     env.DB.prepare('DELETE FROM posts WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM delays WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').bind(id, id),
+    env.DB.prepare('DELETE FROM notifications WHERE user_id = ? OR actor_id = ?').bind(id, id),
+    env.DB.prepare('DELETE FROM push_subs WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id)
   ]);
@@ -328,7 +331,11 @@ async function postExists(env, id) {
 async function toggleLike(env, user, id) {
   if (!(await postExists(env, id))) throw new HttpError(404, 'Publicação não encontrada.');
   const del = await env.DB.prepare('DELETE FROM likes WHERE post_id = ? AND user_id = ?').bind(id, user.id).run();
-  if (!del.meta.changes) await env.DB.prepare('INSERT INTO likes (post_id, user_id) VALUES (?, ?)').bind(id, user.id).run();
+  if (!del.meta.changes) {
+    await env.DB.prepare('INSERT INTO likes (post_id, user_id) VALUES (?, ?)').bind(id, user.id).run();
+    const po = await env.DB.prepare('SELECT user_id, text FROM posts WHERE id = ?').bind(id).first();
+    if (po) await notify(env, { to: po.user_id, type: 'like', actorId: user.id, ref: id, snippet: po.text });
+  }
   return json({ ok: true });
 }
 
@@ -360,6 +367,17 @@ async function addComment(req, env, user, id) {
   }
   await env.DB.prepare('INSERT INTO comments (id, post_id, user_id, anon, author_name, text, created_at, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(crypto.randomUUID(), id, user.id, anon, anon ? null : user.name, text, Date.now(), parent).run();
+  const actorName = anon ? null : user.name;
+  const done = new Set([user.id]);
+  const send = async (to, type, snippet) => { if (!to || done.has(to)) return; done.add(to); await notify(env, { to, type, actorId: anon ? null : user.id, actorName, ref: id, snippet }); };
+  const po = await env.DB.prepare('SELECT user_id, text FROM posts WHERE id = ?').bind(id).first();
+  if (parent) { const pc = await env.DB.prepare('SELECT user_id FROM comments WHERE id = ?').bind(parent).first(); if (pc) await send(pc.user_id, 'reply', text); }
+  const ppl = await env.DB.prepare('SELECT DISTINCT c.user_id AS id, u.name FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.anon = 0').bind(id).all();
+  const low = text.toLowerCase();
+  const cands = [...ppl.results];
+  if (po) { const au = await env.DB.prepare('SELECT id, name FROM users WHERE id = ?').bind(po.user_id).first(); if (au) cands.push(au); }
+  for (const c of cands) if (c.id && c.name && low.includes('@' + c.name.toLowerCase())) await send(c.id, 'mention', text);
+  if (po) await send(po.user_id, 'comment', text);
   return json({ ok: true }, 201);
 }
 
@@ -410,9 +428,10 @@ async function createDelay(req, env, user) {
 
 /* ---------- entrada ---------- */
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
+    env = Object.assign(Object.create(env), { ctx, origin: url.origin });
     try {
       const { pathname: p } = url;
       const m = req.method;
@@ -426,12 +445,13 @@ export default {
       const user = await currentUser(req, env);
       if (p === '/api/me' && m === 'GET') {
         if (!user) return json({ user: null });
-        const [pc, lc, pend] = await Promise.all([
+        const [pc, lc, pend, unr] = await Promise.all([
           env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE user_id = ?').bind(user.id).first(),
           env.DB.prepare('SELECT COUNT(*) AS n FROM likes l JOIN posts p ON p.id = l.post_id WHERE p.user_id = ?').bind(user.id).first(),
           env.DB.prepare("SELECT COUNT(*) AS n FROM follows WHERE followee_id = ? AND status = 'pending'").bind(user.id).first(),
+          env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0').bind(user.id).first(),
         ]);
-        return json({ user: { ...publicUser(user), posts: pc.n, bolts: lc.n, pending: pend.n } });
+        return json({ user: { ...publicUser(user), posts: pc.n, bolts: lc.n, pending: pend.n, unread: unr.n } });
       }
       if (!user) throw new HttpError(401, 'Entre para continuar.');
 
@@ -483,6 +503,7 @@ export default {
           const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?').bind(user.id).first()).n;
           if (n >= 2000) throw bad('Limite de perfis seguidos atingido.');
           await env.DB.prepare('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at, status) VALUES (?, ?, ?, ?)').bind(user.id, um[1], Date.now(), t.is_private ? 'pending' : 'ok').run();
+          await notify(env, { to: um[1], type: t.is_private ? 'request' : 'follow', actorId: user.id, actorName: user.name });
         }
         return json({ ok: true });
       }
@@ -501,6 +522,31 @@ export default {
         ]);
         return json({ user: { ...base, restricted: false, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', posts, followers, following } });
       }
+      if (p === '/api/notifications' && m === 'GET') {
+        const unread = (await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0').bind(user.id).first()).n;
+        if (url.searchParams.get('count')) return json({ unread });
+        const rows = await env.DB.prepare('SELECT id, type, actor_id, actor_name, snippet, n, created_at, read FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 40').bind(user.id).all();
+        return json({ unread, items: rows.results.map((r) => ({ id: r.id, type: r.type, actorId: r.actor_id, text: textFor(r.type, r.actor_name, r.n), snippet: r.snippet || '', t: r.created_at, read: !!r.read })) });
+      }
+      if (p === '/api/notifications/read' && m === 'POST') {
+        await env.DB.prepare('UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0').bind(user.id).run();
+        return json({ ok: true });
+      }
+      if (p === '/api/push/key' && m === 'GET') return json({ key: (await getVapid(env)).pub });
+      if (p === '/api/push/subscribe' && m === 'POST') {
+        const b = await readJson(req);
+        const ep = str(b.endpoint, 600), k = b.keys || {};
+        if (!/^https:\/\//.test(ep) || !/^[\w-]{80,100}$/.test(String(k.p256dh || '')) || !/^[\w-]{16,30}$/.test(String(k.auth || ''))) throw bad('Assinatura inválida.');
+        const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs WHERE user_id = ?').bind(user.id).first()).n;
+        if (n >= 10) await env.DB.prepare('DELETE FROM push_subs WHERE endpoint = (SELECT endpoint FROM push_subs WHERE user_id = ? ORDER BY created_at ASC LIMIT 1)').bind(user.id).run();
+        await env.DB.prepare('INSERT OR REPLACE INTO push_subs (endpoint, user_id, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)').bind(ep, user.id, String(k.p256dh), String(k.auth), Date.now()).run();
+        return json({ ok: true });
+      }
+      if (p === '/api/push/unsubscribe' && m === 'POST') {
+        const ep = str((await readJson(req)).endpoint, 600);
+        await env.DB.prepare('DELETE FROM push_subs WHERE endpoint = ? AND user_id = ?').bind(ep, user.id).run();
+        return json({ ok: true });
+      }
       if (p === '/api/follow-requests' && m === 'GET') {
         const rq = await env.DB.prepare("SELECT u.id, u.name, u.avatar FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? AND f.status = 'pending' ORDER BY f.created_at DESC LIMIT 100").bind(user.id).all();
         const fl = await env.DB.prepare("SELECT u.id, u.name, u.avatar FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? AND f.status = 'ok' ORDER BY f.created_at DESC LIMIT 200").bind(user.id).all();
@@ -509,7 +555,10 @@ export default {
       const frm = p.match(/^\/api\/follow-requests\/([0-9a-f-]{36})$/);
       if (frm && m === 'POST') {
         const act = (await readJson(req)).action;
-        if (act === 'approve') await env.DB.prepare("UPDATE follows SET status = 'ok' WHERE follower_id = ? AND followee_id = ? AND status = 'pending'").bind(frm[1], user.id).run();
+        if (act === 'approve') {
+          const r = await env.DB.prepare("UPDATE follows SET status = 'ok' WHERE follower_id = ? AND followee_id = ? AND status = 'pending'").bind(frm[1], user.id).run();
+          if (r.meta.changes) await notify(env, { to: frm[1], type: 'approved', actorId: user.id, actorName: user.name });
+        }
         else if (act === 'decline' || act === 'remove') await env.DB.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').bind(frm[1], user.id).run();
         else throw bad('Ação inválida.');
         return json({ ok: true });
@@ -521,7 +570,11 @@ export default {
         const ex = await env.DB.prepare('SELECT 1 AS x FROM comments WHERE id = ?').bind(clm[1]).first();
         if (!ex) throw new HttpError(404, 'Comentário não encontrado.');
         const del = await env.DB.prepare('DELETE FROM comment_likes WHERE comment_id = ? AND user_id = ?').bind(clm[1], user.id).run();
-        if (!del.meta.changes) await env.DB.prepare('INSERT OR IGNORE INTO comment_likes (comment_id, user_id) VALUES (?, ?)').bind(clm[1], user.id).run();
+        if (!del.meta.changes) {
+          await env.DB.prepare('INSERT OR IGNORE INTO comment_likes (comment_id, user_id) VALUES (?, ?)').bind(clm[1], user.id).run();
+          const co = await env.DB.prepare('SELECT user_id, text FROM comments WHERE id = ?').bind(clm[1]).first();
+          if (co) await notify(env, { to: co.user_id, type: 'clike', actorId: user.id, ref: clm[1], snippet: co.text });
+        }
         return json({ ok: true });
       }
       if (cmm && m === 'PATCH') {

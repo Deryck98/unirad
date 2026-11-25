@@ -471,3 +471,12 @@ body:not(.dark-welcome){background:#eef3fb}
 .frow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .fname{flex:1;text-align:left;font-weight:600;font-size:15px;padding:10px 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .btn.sm{min-height:40px;padding:0 12px;font-size:13px;width:auto;flex:none}
+.top .bell{position:relative;color:#fff}
+.bbadge{position:absolute;top:2px;right:0;min-width:18px;height:18px;border-radius:9px;background:#f5b301;color:#0b1f3a;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1}
+.bbadge[hidden]{display:none}
+.nrow{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;padding:12px 4px;border-bottom:1px solid var(--line);min-height:56px}
+.nrow.new{background:#fff8e6}
+.nic{flex:none;width:34px;height:34px;border-radius:50%;background:#e7ecf4;color:var(--navy);display:flex;align-items:center;justify-content:center}
+.ntxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:14px}
+.ntxt b{font-weight:600}.ntxt small{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ndot{flex:none;width:9px;height:9px;border-radius:50%;background:#f5b301;margin-top:6px}

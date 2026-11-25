@@ -19,6 +19,7 @@ const ago = (t) => {
 };
 const logo = (s = 36) => emblem({ size: s, text: false });
 const ICONS = {
+  bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -384,6 +385,7 @@ function screenProfile() {
     <div class="list">
       <label class="lrow"><span>Começar posts como anônimo</span><input type="checkbox" class="sw" data-action="toggle-anon" ${u.anon ? 'checked' : ''}></label>
       ${api ? `<label class="lrow"><span>Perfil privado<small class="muted">Só quem você aprovar vê sua bio e publicações.</small></span><input type="checkbox" class="sw" data-action="toggle-private" ${u.private ? 'checked' : ''}></label>
+      ${pushSupported() ? `<label class="lrow"><span>Avisos no celular<small class="muted">${standalone() || !isIOS() ? 'Receba avisos mesmo com o app fechado.' : 'No iPhone, instale o app na tela inicial primeiro.'}</small></span><input type="checkbox" class="sw" data-action="toggle-push" ${ui.pushOn ? 'checked' : ''}></label>` : ''}
       <button class="lrow" data-action="open-followers"><span>Seguidores e pedidos${u.pending ? `<b class="badge">${u.pending}</b>` : ''}</span>${ic('chev', 18)}</button>` : ''}
       <a class="lrow" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(INVITE())}"><span>Convidar pelo WhatsApp</span>${ic('chev', 18)}</a>
       ${row('copy-link', 'Copiar link de convite')}
@@ -424,6 +426,49 @@ function modalUser() {
   ${has ? '' : '<p class="muted small center">Esse profissional ainda não preencheu o perfil.</p>'}
   <h4 class="usec">Publicações</h4><div id="uposts">${list}</div>`);
 }
+
+const NIC = { like: 'bolt', clike: 'bolt', comment: 'msg', reply: 'msg', mention: 'msg', follow: 'users', request: 'users', approved: 'users' };
+function modalNotifs() {
+  const d = ui.notifs;
+  const banner = pushSupported() && !ui.pushOn && (standalone() || !isIOS()) ? `<button class="btn out" data-action="enable-push" style="margin-bottom:8px">Ativar avisos no celular</button>` : '';
+  if (!d) return sheet('Avisos', '<p class="muted small">Carregando…</p>');
+  const row = (n) => `<${n.actorId ? 'button' : 'div'} class="nrow ${n.read ? '' : 'new'}" ${n.actorId ? `data-action="view-user" data-id="${n.actorId}"` : ''}><span class="nic">${ic(NIC[n.type] || 'bell', 18)}</span><span class="ntxt"><b>${esc(n.text)}</b>${n.snippet ? `<small class="muted">“${esc(n.snippet)}”</small>` : ''}<small class="muted">${ago(n.t)}</small></span>${n.read ? '' : '<i class="ndot"></i>'}</${n.actorId ? 'button' : 'div'}>`;
+  return sheet('Avisos', `${banner}${d.items.map(row).join('') || '<p class="muted small center">Nenhum aviso ainda. Quando alguém curtir, comentar ou seguir você, aparece aqui.</p>'}`);
+}
+function updateBell() {
+  const b = document.getElementById('bbadge'); if (!b) return;
+  const n = (ui.user && ui.user.unread) || 0;
+  b.hidden = !n; b.textContent = n > 9 ? '9+' : String(n || '');
+}
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const pushSupported = () => Store.mode === 'api' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const keyBytes = (k) => { const p = '='.repeat((4 - (k.length % 4)) % 4); const r = atob((k + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, (c) => c.charCodeAt(0)); };
+async function enablePush() {
+  if (!pushSupported()) { toast('Este aparelho não aceita avisos.'); return false; }
+  if (isIOS() && !standalone()) { toast('No iPhone, instale o app na tela inicial para receber avisos.'); return false; }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') { toast('Permissão negada. Ative os avisos nas configurações do navegador.'); return false; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes((await Store.pushKey()).key) });
+    await Store.pushSub(sub.toJSON());
+    ui.pushOn = true; toast('Avisos no celular ligados.'); return true;
+  } catch (e) { toast('Não foi possível ativar os avisos agora.'); return false; }
+}
+async function disablePush() {
+  try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) { await Store.pushUnsub(sub.endpoint); await sub.unsubscribe(); } } catch { /* ignorado */ }
+  ui.pushOn = false; toast('Avisos no celular desligados.');
+}
+async function initPush() {
+  if (!pushSupported() || Notification.permission !== 'granted') return;
+  try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) { await Store.pushSub(sub.toJSON()); ui.pushOn = true; } } catch { /* ignorado */ }
+}
+async function pollUnread() {
+  if (!ui.user || document.hidden || Store.mode !== 'api') return;
+  try { const r = await Store.unread(); if (ui.user) { ui.user.unread = r.unread; updateBell(); } } catch { /* ignorado */ }
+}
+setInterval(pollUnread, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pollUnread(); });
 
 function modalFollowers() {
   const d = ui.fol;
@@ -516,7 +561,7 @@ function nav() {
   return `<nav class="nav">${t('inicio', 'home', 'Início')}${t('atrasos', 'alert', 'Atrasos')}<button class="navplus" data-action="new-post" aria-label="Nova publicação">${ic('plus', 26)}</button>${t('direitos', 'shield', 'Direitos')}${t('perfil', 'user', 'Perfil')}</nav>`;
 }
 function header() {
-  return `<header class="top"><div class="row gap8">${logo(30)}<b class="brand">UniRad</b></div><button class="ghost" data-action="invite" aria-label="Convidar colegas">${ic('share', 22)}</button></header>`;
+  return `<header class="top"><div class="row gap8">${logo(30)}<b class="brand">UniRad</b></div><div class="row gap8">${Store.mode === 'api' ? `<button class="ghost bell" data-action="open-notifs" aria-label="Avisos">${ic('bell', 24)}<span class="bbadge" id="bbadge" ${ui.user.unread ? '' : 'hidden'}>${ui.user.unread > 9 ? '9+' : ui.user.unread || ''}</span></button>` : ''}<button class="ghost" data-action="invite" aria-label="Convidar colegas">${ic('share', 22)}</button></div></header>`;
 }
 /* ---- botão voltar do celular: volta uma tela dentro do app ---- */
 const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignorado */ } };
@@ -542,14 +587,14 @@ window.addEventListener('popstate', () => {
 
 function render() {
   document.body.classList.toggle('dark-welcome', !ui.user);
-  document.body.classList.toggle('noscroll', ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
+  document.body.classList.toggle('noscroll', ui.modal === 'notifs' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
   if (!ui.user) {
     $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -718,6 +763,14 @@ document.addEventListener('click', async (ev) => {
       if (ui.tab === 'inicio' && ui.view === 'seguindo') refresh({ quiet: true });
       return;
     }
+    if (a === 'open-notifs') {
+      ui.notifs = null; openModal('notifs');
+      try { ui.notifs = await Store.notifs(); } catch (e) { toast(e.message); return; }
+      if (ui.modal === 'notifs') render();
+      if (ui.user.unread) { ui.user.unread = 0; updateBell(); Store.readNotifs().catch(() => {}); }
+      return;
+    }
+    if (a === 'enable-push') { if (await enablePush()) render(); return; }
     if (a === 'open-followers') { ui.fol = null; openModal('followers'); try { ui.fol = await Store.requests(); } catch (e) { toast(e.message); } if (ui.modal === 'followers') render(); return; }
     if (a === 'req') {
       const id = el.dataset.id, act = el.dataset.act;
@@ -867,6 +920,9 @@ document.addEventListener('change', async (ev) => {
     } catch (e) { toast(e.message); }
     el.value = ''; return;
   }
+  if (el.dataset.action === 'toggle-push') {
+    if (el.checked) { if (!(await enablePush())) el.checked = false; } else await disablePush();
+  }
   if (el.dataset.action === 'toggle-private') {
     try { await Store.setPrivate(el.checked); ui.user.private = el.checked; if (!el.checked) ui.user.pending = 0; toast(el.checked ? 'Perfil privado ligado.' : 'Perfil público de novo.'); render(); } catch (e) { el.checked = !el.checked; toast(e.message); }
   }
@@ -1006,7 +1062,7 @@ function showSplash() {
   showSplash();
   Store = await connect();
   try { ui.user = await Store.init(); } catch { ui.user = null; }
-  if (ui.user) await refresh(); else render();
+  if (ui.user) { await refresh(); initPush(); } else render();
 })();
 
 /* menções: digitar @ mostra as pessoas da conversa */
