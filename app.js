@@ -93,7 +93,7 @@ const loadingBox = '<div class="center muted pad8" role="status">Carregando…</
 /* ---------- telas ---------- */
 function screenWelcome() {
   return `<main class="welcome">
-    <div class="wlogo">${emblem({ size: 190, text: true })}</div>
+    <div class="wlogo">${emblem({ size: 170, text: false })}</div>
     <h1>UniRad</h1>
     <p class="lead">${CONFIG.tagline}</p>
     <p class="muted center">A rede dos técnicos e tecnólogos em radiologia. Aqui a gente se une, mostra a realidade da categoria e luta por piso, jornada e salário em dia.</p>
@@ -268,6 +268,7 @@ function header() {
 }
 
 function render() {
+  document.body.classList.toggle('dark-welcome', !ui.user && ui.screen === 'welcome');
   if (!ui.user) {
     $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
