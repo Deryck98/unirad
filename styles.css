@@ -441,3 +441,27 @@ body:not(.dark-welcome){background:#eef3fb}
 .avatar.ini.av3{background:#1f7a45}.avatar.ini.av4{background:#7a2a74}.avatar.ini.av5{background:#a35a0a}
 .phero{background:linear-gradient(180deg,#dbe6f8,#eef3fb);margin:0 -14px;padding-left:14px;padding-right:14px;border-radius:0 0 18px 18px}
 .list{border-color:#d5deec}
+
+/* seguir, perfil publico, zoom de foto */
+.avbtn{padding:0;border:0;background:none;border-radius:50%;display:block;flex:none;line-height:0}
+.avbtn:active{opacity:.7}
+.cname{padding:0;font:inherit;color:inherit;text-align:left}
+.cname:active{text-decoration:underline}
+.vtabs.v4 button{padding:13px 2px;font-size:14px}
+.vtabs.v4 .vmore{flex:none;min-width:48px;padding:13px 10px;font-size:14px;white-space:nowrap;max-width:42%;overflow:hidden;text-overflow:ellipsis}
+.vtabs.v4 .vmore.on::after{left:10%;right:10%}
+.avatar.huge{width:96px;height:96px;font-size:32px;margin:0 auto}
+.pav{padding:0;border:0;background:none;border-radius:50%;display:block;margin:0 auto;box-shadow:0 0 0 3px #fff,0 0 0 4px #c5cddb}
+.uhero{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;padding:2px 0 10px}
+.ubio{font-size:15px;color:var(--text)}
+.ustats{display:flex;justify-content:center;gap:30px;margin:2px 0}
+.ustats div{display:flex;flex-direction:column;align-items:center}
+.ustats b{font-size:18px;font-weight:700;color:var(--navy)}
+.ustats span{font-size:12px;color:var(--muted)}
+.uhero .btn{width:100%;min-height:44px}
+.udet{margin:6px 0;border:1px solid var(--line);border-radius:12px;padding:0 12px;background:#fff}
+.udet summary{padding:12px 0;font-weight:600;min-height:44px;cursor:pointer}
+.usec{margin:14px 0 6px;font-size:14px;color:var(--muted);font-weight:600}
+.upost{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:14px}
+.zprof{position:absolute;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#fff;color:var(--navy);font-weight:700;border-radius:24px;padding:12px 24px;min-height:44px;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+#ufollow:not(.out){background:#f5b301;color:#0b1f3a}

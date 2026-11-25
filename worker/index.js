@@ -152,6 +152,7 @@ async function deleteAccount(req, env, user) {
     env.DB.prepare('DELETE FROM poll_votes WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM posts WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM delays WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').bind(id, id),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id)
   ]);
@@ -182,7 +183,15 @@ async function stats(url, env) {
 }
 
 async function listPosts(url, env, user) {
-  const sc = scopeClause(url.searchParams.get('scope') || 'brasil');
+  const scopeQ = url.searchParams.get('scope') || 'brasil';
+  const authorQ = url.searchParams.get('author') || '';
+  let sc;
+  if (authorQ) {
+    if (!/^[0-9a-f-]{36}$/.test(authorQ)) throw bad('Perfil inválido.');
+    sc = { sql: 'p.anon = 0 AND p.user_id = ?', args: [authorQ] };
+  } else if (scopeQ === 'seguindo') {
+    sc = { sql: 'p.anon = 0 AND p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?)', args: [user.id] };
+  } else sc = scopeClause(scopeQ);
   const cat = url.searchParams.get('cat') || 'tudo';
   let catSql = '';
   const args = [user.id, ...sc.args];
@@ -212,7 +221,7 @@ async function listPosts(url, env, user) {
         EXISTS(SELECT 1 FROM comment_likes l WHERE l.comment_id = c.id AND l.user_id = ?) AS liked
        FROM comments c WHERE c.post_id IN (${ids.map(() => '?').join(',')}) ORDER BY c.created_at ASC`
     ).bind(user.id, ...ids).all();
-    for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at, mine: c.user_id === user.id, parent: c.parent_id || null, avatar: c.anon ? null : (c.avatar || null), likes: c.likes, liked: !!c.liked });
+    for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, authorId: c.anon ? null : c.user_id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at, mine: c.user_id === user.id, parent: c.parent_id || null, avatar: c.anon ? null : (c.avatar || null), likes: c.likes, liked: !!c.liked });
     const pollIds = posts.filter((p) => p.poll).map((p) => p.id);
     if (pollIds.length) {
       const q = pollIds.map(() => '?').join(',');
@@ -454,11 +463,30 @@ export default {
       const im = p.match(/^\/api\/img\/([0-9a-f-]{36}\.[a-z]{3,4})$/);
       if (im && m === 'GET') return await serveImage(env, im[1]);
 
-      const um = p.match(/^\/api\/users\/([0-9a-f-]{36})$/);
-      if (um && m === 'GET') {
+      const um = p.match(/^\/api\/users\/([0-9a-f-]{36})(\/follow)?$/);
+      if (um && um[2] && m === 'POST') {
+        if (um[1] === user.id) throw bad('Você não pode seguir a si mesmo.');
+        const ex = await env.DB.prepare('SELECT 1 AS x FROM users WHERE id = ?').bind(um[1]).first();
+        if (!ex) throw new HttpError(404, 'Perfil não encontrado.');
+        const del = await env.DB.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').bind(user.id, um[1]).run();
+        if (!del.meta.changes) {
+          const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?').bind(user.id).first()).n;
+          if (n >= 2000) throw bad('Limite de perfis seguidos atingido.');
+          await env.DB.prepare('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)').bind(user.id, um[1], Date.now()).run();
+        }
+        return json({ ok: true });
+      }
+      if (um && !um[2] && m === 'GET') {
         const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, avatar FROM users WHERE id = ?').bind(um[1]).first();
         if (!u) throw new HttpError(404, 'Perfil não encontrado.');
-        return json({ user: { name: u.name, role: u.role, region: u.region, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '' } });
+        const q = async (sql, ...a) => (await env.DB.prepare(sql).bind(...a).first()).n;
+        const [posts, followers, following, fl] = await Promise.all([
+          q('SELECT COUNT(*) AS n FROM posts WHERE user_id = ? AND anon = 0', um[1]),
+          q('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?', um[1]),
+          q('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?', um[1]),
+          q('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ? AND followee_id = ?', user.id, um[1])
+        ]);
+        return json({ user: { id: um[1], me: um[1] === user.id, name: u.name, role: u.role, region: u.region, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '', posts, followers, following, followed: fl > 0 } });
       }
 
       const cmm = p.match(/^\/api\/comments\/([0-9a-f-]{36})$/);

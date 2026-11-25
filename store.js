@@ -31,6 +31,8 @@ const api = {
   async setAnon(anon) { await call('PATCH', '/me', { anon }); },
   saveProfile(p) { return call('PATCH', '/me', p); },
   async getUser(id) { return (await call('GET', '/users/' + id)).user; },
+  userPosts(id) { return call('GET', `/posts?author=${encodeURIComponent(id)}`); },
+  follow(id) { return call('POST', `/users/${id}/follow`); },
   stats(scope) { return call('GET', '/stats?scope=' + encodeURIComponent(scope)); },
   posts({ scope, cat, before }) { return call('GET', `/posts?scope=${encodeURIComponent(scope)}&cat=${cat || 'tudo'}${before ? '&before=' + before : ''}`); },
   vote(id, opt) { return call('POST', `/posts/${id}/vote`, { opt }); },
@@ -65,6 +67,8 @@ const demo = {
   async setAnon(anon) { L.updateUser({ anon }); },
   async saveProfile(p) { L.updateUser(p); },
   async getUser() { return null; },
+  async userPosts() { return { posts: [] }; },
+  async follow() {},
   async stats(scope) {
     const s = scope === 'brasil' ? 'brasil' : Number(scope);
     const delays = L.delays(s);
