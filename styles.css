@@ -547,3 +547,13 @@ body:not(.dark-welcome){background:#eef3fb}
 .rnav{margin-top:14px}
 .linkbtn{min-height:44px;padding:0 8px;color:var(--navy);font-weight:600;font-size:15px}
 .linkbtn[disabled]{opacity:.35}
+
+/* links externos */
+.lk{display:flex;align-items:stretch;border:1px solid #b9c4d8;border-radius:10px;overflow:hidden;margin:8px 0;background:#fff;max-width:100%}
+.lkmain{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:52px;text-align:left;color:#185fa5}
+.lkt{display:flex;flex-direction:column;min-width:0}
+.lkt b{font-size:14px;font-weight:600}
+.lkt span{font-size:12px;color:#5f6b80;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lkcopy{flex:none;width:52px;border-left:1px solid #b9c4d8;display:flex;align-items:center;justify-content:center;color:var(--navy)}
+.lkcopy:active,.lkmain:active{background:#eef3fb}
+.linkurl{background:#f1f4f9;border-radius:8px;padding:10px;font-size:13px;word-break:break-all;margin:10px 0 14px}

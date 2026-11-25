@@ -19,6 +19,8 @@ const ago = (t) => {
 };
 const logo = (s = 36) => emblem({ size: s, text: false });
 const ICONS = {
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
@@ -109,7 +111,7 @@ function postCard(p) {
         <button class="more" data-action="menu-post" data-id="${p.id}" aria-label="Mais opções">${ic('dots', 20)}</button>
       </div>
       ${p.cat !== 'geral' ? `<span class="chip c-${p.cat}">${CATS[p.cat]}</span>` : ''}
-      <p class="body">${esc(p.text).replace(/\n/g, '<br>')}</p>
+      <p class="body">${richText(p.text)}</p>
       ${p.image ? `<button class="pimgwrap" data-action="zoom" data-src="${esc(imgUrl(p.image))}" aria-label="Ampliar foto"><img class="pimg" src="${imgUrl(p.image)}" alt="Foto da publicação" loading="lazy" decoding="async"></button>` : ''}
       ${pollHtml(p)}
       ${p.place || p.salary ? `<div class="meta">${p.place ? `<span>${ic('briefcase', 14)} ${esc(p.place)}</span>` : ''}${p.salary ? `<span>Salário: ${esc(p.salary)}</span>` : ''}</div>` : ''}
@@ -139,10 +141,33 @@ function threadNames(p) {
   s.delete(ui.user.name);
   return [...s];
 }
-function mentionHtml(text, names) {
-  const h = esc(text).replace(/\n/g, '<br>');
-  const alt = names.slice().sort((x, y) => y.length - x.length).map((n) => rxEsc(esc(n))).join('|');
-  return h.replace(new RegExp('@(' + (alt ? alt + '|' : '') + '[\\p{L}\\d_]+)', 'gu'), '<span class="mention">@$1</span>');
+const URL_RX = /https?:\/\/[^\s<]+/gi;
+function linkCard(raw) {
+  let tail = ''; let u = raw;
+  const m = u.match(/(?:[.,;:!?)\]]|&quot;|&#39;)+$/); if (m) { tail = m[0]; u = u.slice(0, -tail.length); }
+  let url; try { url = new URL(u.replace(/&amp;/g, '&')); } catch { return raw; }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return raw;
+  const full = esc(url.href), host = esc(url.hostname.replace(/^www\./, ''));
+  return `<span class="lk"><button type="button" class="lkmain" data-action="open-link" data-url="${full}">${ic('link', 18)}<span class="lkt"><b>${host}</b><span>${esc(url.href.replace(/^https?:\/\/(www\.)?/, ''))}</span></span></button><button type="button" class="lkcopy" data-action="copy-link" data-url="${full}" aria-label="Copiar link">${ic('copy', 18)}</button></span>${tail}`;
+}
+/* texto seguro: escapa, transforma links em cartões e (opcional) destaca @menções */
+function richText(text, names) {
+  const h = esc(text);
+  const alt = names ? names.slice().sort((x, y) => y.length - x.length).map((n) => rxEsc(esc(n))).join('|') : null;
+  const men = names ? new RegExp('@(' + (alt ? alt + '|' : '') + '[\\p{L}\\d_]+)', 'gu') : null;
+  let out = '', last = 0, mt;
+  const plain = (t) => (men ? t.replace(men, '<span class="mention">@$1</span>') : t);
+  URL_RX.lastIndex = 0;
+  while ((mt = URL_RX.exec(h))) { out += plain(h.slice(last, mt.index)) + linkCard(mt[0]); last = mt.index + mt[0].length; }
+  return (out + plain(h.slice(last))).replace(/\n/g, '<br>');
+}
+function mentionHtml(text, names) { return richText(text, names); }
+function modalLink() {
+  const u = ui.linkUrl || '';
+  return sheet('Você vai sair do UniRad', `<p class="muted small">Abra só links de quem você confia. Nunca informe senha ou dados de cartão.</p>
+    <div class="linkurl">${esc(u)}</div>
+    <div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><a class="btn gold" style="flex:1;text-align:center;text-decoration:none" target="_blank" rel="noopener noreferrer nofollow" href="${esc(u)}" data-action="link-opened">Abrir link</a></div>
+    <button type="button" class="linkbtn" style="width:100%;margin-top:6px" data-action="copy-link" data-url="${esc(u)}">Copiar link</button>`);
 }
 function commentsList(p) {
   const api = Store.mode === 'api';
@@ -308,7 +333,7 @@ function shortcuts() {
 
 function screenHome() {
   return `<main class="feed">
-    ${ui.announcement ? `<div class="annc"><div class="anh">${ic('flag', 14)} Aviso do UniRad · ${ago(ui.announcement.t)}</div><div>${esc(ui.announcement.text)}</div></div>` : ''}
+    ${ui.announcement ? `<div class="annc"><div class="anh">${ic('flag', 14)} Aviso do UniRad · ${ago(ui.announcement.t)}</div><div>${richText(ui.announcement.text)}</div></div>` : ''}
     ${shortcuts()}
     ${viewSwitch(Store.mode === 'api')}
     ${composer()}
@@ -715,7 +740,7 @@ const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignora
 const popSilently = () => { ui.skipPop = 1; history.back(); };
 function openModal(m) { ui.modal = m; pushH(); render(); }
 function openOver(m) { (ui.stk = ui.stk || []).push(ui.modal); openModal(m); }
-function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'pick' || ui.modal === 'rate') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
+function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'pick' || ui.modal === 'rate' || ui.modal === 'link') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
 function closeModal() { if (ui.modal) { ui.modal = backModal(); if (!ui.modal) ui.stk = []; popSilently(); } render(); }
 function openRootModal(html) { document.getElementById('modalRoot').innerHTML = html; ui.rootModal = true; pushH(); }
 function closeRootModal() { document.getElementById('modalRoot').innerHTML = ''; if (ui.rootModal) { ui.rootModal = false; popSilently(); } }
@@ -741,7 +766,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'link' ? modalLink() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -961,6 +986,13 @@ document.addEventListener('click', async (ev) => {
       try { await call; } catch (e) { if (prev === undefined) delete mine[st.m[0]]; else mine[st.m[0]] = prev; rt.lock = false; render(); toast(e.message); return; }
       if (same) { rt.lock = false; return; }
       setTimeout(go, 220); return;
+    }
+    if (a === 'open-link') { ui.linkUrl = el.dataset.url; return openOver('link'); }
+    if (a === 'link-opened') { return closeModal(); }
+    if (a === 'copy-link') {
+      const u = el.dataset.url;
+      try { await navigator.clipboard.writeText(u); } catch { const t = document.createElement('textarea'); t.value = u; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch { /* ignorado */ } t.remove(); }
+      toast('Link copiado'); return;
     }
     if (a === 'union') { try { await Store.toggleUnion(); ui.union = await Store.union(); render(); } catch (e) { toast(e.message); } return; }
     if (a === 'open-announce') { openModal('announce'); return; }
