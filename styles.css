@@ -622,7 +622,7 @@ html[data-theme=dark] .searchbar,html[data-theme=dark] .composer,html[data-theme
 html[data-theme=dark] .composer .fake{background:var(--soft);color:var(--muted)}
 html[data-theme=dark] input,html[data-theme=dark] textarea,html[data-theme=dark] select{background:var(--soft);border-color:var(--line2);color:var(--text)}
 html[data-theme=dark] .btn.out{background:transparent;border-color:var(--line2);color:var(--text)}
-html[data-theme=dark] .btn:not(.out):not(.gold){background:#2c4a80;color:#fff}
+html[data-theme=dark] .btn:not(.out):not(.wa){background:var(--gold);color:#0b1f3a}
 html[data-theme=dark] .annc,html[data-theme=dark] .unioncard{background:#2a2208;border-color:#6b5412;color:#f3d98a}
 html[data-theme=dark] .unioncard b,html[data-theme=dark] .annc b{color:#f5c84a}
 html[data-theme=dark] .unioncard .btn.out{background:transparent;color:#f3d98a;border-color:#6b5412}
@@ -823,3 +823,33 @@ html[data-theme=dark] .story .lbl{color:var(--text)}
 .sn-pdots{display:flex;justify-content:center;gap:6px;margin:16px 0 6px}
 .sn-pdots i{display:block;width:6px;height:6px;border-radius:3px;background:var(--line);transition:width .15s}
 .sn-pdots i.on{width:18px;background:#f5b301}
+
+/* ===== Revisão de design: um só padrão ===== */
+.btn{background:var(--gold);color:var(--navy);font-weight:800;border-radius:26px;white-space:nowrap}
+.btn:disabled{opacity:.6}
+.btn.out{background:transparent;border:1.5px solid var(--navy);color:var(--navy);font-weight:700}
+.btn.wa{background:#1fa855;color:#fff}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn.slim{background:transparent;border:0;color:#8fb8ff}
+.stickybtns .btn.out{flex:1}
+.welcome .btn.out{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45)}
+input.sw:checked{background:var(--gold)}
+.phd{margin:4px 0 12px}
+.phd h2{margin:0;font-size:24px;font-weight:800;color:var(--navy)}
+.phd p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.utabs{display:flex;gap:22px;border-bottom:1px solid var(--line2);margin:0 0 14px}
+.utabs button{position:relative;padding:10px 2px 12px;font-size:15px;font-weight:600;color:var(--muted);min-height:44px}
+.utabs button.on{color:var(--navy);font-weight:800}
+.utabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;border-radius:3px;background:var(--gold)}
+.unioncard.plain{background:var(--card);border:1px solid var(--line2);border-left:4px solid var(--gold);border-radius:14px}
+.unioncard.plain b{color:var(--text)}.unioncard.plain p{color:var(--muted)}
+html[data-theme=dark] .btn.wa{background:#1fa855;color:#fff}
+html[data-theme=dark] .btn.out{background:transparent;border-color:rgba(255,255,255,.5);color:#eef3ff}
+html[data-theme=dark] .btn.danger{color:#ff8a80;border-color:#ff8a80}
+html[data-theme=dark] .phd h2{color:var(--text)}
+html[data-theme=dark] .utabs button.on{color:var(--text)}
+html[data-theme=dark] .unioncard.plain{background:var(--card);border-color:var(--line2);border-left-color:var(--gold)}
+html[data-theme=dark] .unioncard.plain b{color:var(--text)}html[data-theme=dark] .unioncard.plain p{color:var(--muted)}
+html[data-theme=dark] .anonst{background:#22345a!important;color:#f5b301;box-shadow:0 0 0 2px #f5b301 inset}
+.sec,.usec{font-size:17px;font-weight:800;color:var(--text)}
+h3.usec{margin:20px 0 6px;text-transform:none;letter-spacing:0}

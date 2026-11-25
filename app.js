@@ -72,13 +72,13 @@ function viewSwitch(follow = false) {
     <button class="${ui.view === 'mine' ? 'on' : ''}" data-action="view" data-v="mine"><span>Minha região</span></button>
     <button class="${ui.view === 'brasil' ? 'on' : ''}" data-action="view" data-v="brasil"><span>Brasil todo</span></button>
     <button class="${ui.view === 'seguindo' ? 'on' : ''}" data-action="view" data-v="seguindo"><span>Seguindo</span></button>
-    <label class="vmore ${isOther ? 'on' : ''}"><span>${isOther ? esc(viewName(ui.view)) + ' ▾' : '▾'}</span><select data-action="view-select" aria-label="Ver outra região"><option value="">Outra região</option>${other}</select></label>
+    <label class="vmore ${isOther ? 'on' : ''}"><span>${isOther ? esc(viewName(ui.view)) : 'Região'} ▾</span><select data-action="view-select" aria-label="Ver outra região"><option value="">Outra região</option>${other}</select></label>
   </div>`;
   }
   return `<div class="vtabs">
     <button class="${ui.view === 'mine' ? 'on' : ''}" data-action="view" data-v="mine"><span>Minha região</span></button>
     <button class="${ui.view === 'brasil' ? 'on' : ''}" data-action="view" data-v="brasil"><span>Brasil todo</span></button>
-    <label class="${isOther ? 'on' : ''}"><span>${isOther ? esc(viewName(ui.view)) : 'Outra região'} ▾</span><select data-action="view-select" aria-label="Ver outra região"><option value="">Outra região</option>${other}</select></label>
+    <label class="${isOther ? 'on' : ''}"><span>${isOther ? esc(viewName(ui.view)) : 'Região'} ▾</span><select data-action="view-select" aria-label="Ver outra região"><option value="">Outra região</option>${other}</select></label>
   </div>`;
 }
 
@@ -488,6 +488,7 @@ function screenHome() {
 }
 
 const fmtMonth = (m) => { const [y, mo] = String(m || '').split('-'); return MES[Number(mo) - 1] ? `${MES[Number(mo) - 1]}/${y}` : ''; };
+const pageHead = (t, s) => `<div class="phd"><h2>${t}</h2><p>${s}</p></div>`;
 function screenDelays() {
   if (!ui.stats) return `<main class="pad">${viewSwitch()}${loadingBox}</main>`;
   const { members, national, delays } = ui.stats;
@@ -495,9 +496,10 @@ function screenDelays() {
   const meta = MARCOS.find((m) => national < m) || MARCOS[MARCOS.length - 1];
   const showBar = national >= 50;
   const pct = Math.min(100, Math.round((national / meta) * 100));
-  const asub = Store.mode === 'api' ? `<div class="segtabs"><button class="${ui.asub === 'aval' ? '' : 'on'}" data-action="asub" data-v="mural">Atrasos</button><button class="${ui.asub === 'aval' ? 'on' : ''}" data-action="asub" data-v="aval">Avaliações</button></div>` : '';
-  if (ui.asub === 'aval' && Store.mode === 'api') return `<main class="pad">${viewSwitch()}${asub}<button class="btn gold" data-action="pick-place" style="margin-bottom:10px">Avaliar um local</button>${avalSection()}</main>`;
+  const asub = Store.mode === 'api' ? `<div class="utabs"><button class="${ui.asub === 'aval' ? '' : 'on'}" data-action="asub" data-v="mural">Atrasos</button><button class="${ui.asub === 'aval' ? 'on' : ''}" data-action="asub" data-v="aval">Avaliações</button></div>` : '';
+  if (ui.asub === 'aval' && Store.mode === 'api') return `<main class="pad">${pageHead('Atrasos', 'Relatos e avaliações da sua região')}${viewSwitch()}${asub}<button class="btn gold" data-action="pick-place" style="margin-bottom:10px">Avaliar um local</button>${avalSection()}</main>`;
   return `<main class="pad">
+    ${pageHead('Atrasos', 'Relatos e avaliações da sua região')}
     ${viewSwitch()}
     ${asub}
     <section class="hero">
@@ -511,7 +513,7 @@ function screenDelays() {
       <div class="stat red"><div class="small">Relatos</div><div class="n">${delays.total}</div></div>
       <div class="stat amber"><div class="small">Atraso médio</div><div class="n">${delays.avgDays ? delays.avgDays + ' dias' : '—'}</div></div>
     </div>
-    <div class="row gap8"><button class="btn big" style="flex:1" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>${Store.mode === 'api' ? `<button class="btn big gold" style="flex:1" data-action="pick-place">Avaliar local</button>` : ''}</div>
+    <div class="row gap8"><button class="btn big" style="flex:1" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>${Store.mode === 'api' ? `<button class="btn big out" style="flex:1" data-action="pick-place">Avaliar local</button>` : ''}</div>
 
     ${delays.recent && delays.recent.length ? `<h3 class="sec">Relatos recentes</h3><div class="list">${delays.recent.map((r) => `<div class="lrow static"><span>${esc(r.type)}${r.days ? ` · ${r.days} dias` : ''}${r.months > 1 ? ` · ${r.months} meses` : ''}<br><span class="muted small">${ago(r.t)}</span></span><b class="redtxt">${esc(fmtMonth(r.month))}</b></div>`).join('')}</div>` : ''}
     ${delays.top.length ? `<div class="card"><div class="small muted">Locais mais citados</div>${delays.top.map((t) => `<div class="row between li"><span>${esc(t.hospital)}</span><b>${t.n} relatos</b></div>`).join('')}</div>`
@@ -676,7 +678,7 @@ function conselhoSection() {
     <p class="muted small">A nota é do órgão, nunca de uma pessoa. Cada assunto aparece com 3 respostas ou mais.</p>
     ${ui.councils.map(councilCard).join('')}
     <button class="btn out" data-action="open-demands" style="margin:2px 0 10px">Ver e fazer cobranças ao conselho</button>
-    <div class="unioncard elec"><b>Eleições do conselho</b>
+    <div class="unioncard elec plain"><b>Eleições do conselho</b>
       <p>Data, local e candidatos devem ser conferidos só em fonte oficial. Compare as propostas e vote.</p>
       <a class="btn out" target="_blank" rel="noopener noreferrer" href="https://www.conter.gov.br" style="text-align:center;text-decoration:none">Ver no site do CONTER</a></div>`;
 }
@@ -727,8 +729,7 @@ const RIGHTS = [
   ['Salário atrasado: o que fazer', 'Guarde contracheques, extratos e mensagens. Registre o relato aqui no mural e procure orientação do CRTR, do Ministério Público do Trabalho ou de um advogado trabalhista.']
 ];
 function screenRights() {
-  return `<main class="pad"><h2>Direitos</h2>
-    <p class="muted small">Informativo geral, não é aconselhamento jurídico. Confira sempre o texto atual da lei.</p>
+  return `<main class="pad">${pageHead('Direitos', 'Informativo geral, não é aconselhamento jurídico. Confira sempre o texto atual da lei.')}
     <div class="list">${RIGHTS.map(([t, b]) => `<details class="acc2"><summary><span>${esc(t)}</span>${ic('chev', 18)}</summary><p>${esc(b)}</p></details>`).join('')}</div>
     <div class="list"><a class="lrow" target="_blank" rel="noopener" href="https://www.conter.gov.br"><span>CONTER e CRTRs<br><span class="muted small">No site do CONTER você encontra o CRTR da sua região.</span></span>${ic('chev', 18)}</a></div>
     ${conselhoSection()}
@@ -737,7 +738,7 @@ function screenRights() {
       <div class="ubar" role="progressbar" aria-valuemin="0" aria-valuemax="${unionGoal(ui.union.count)}" aria-valuenow="${ui.union.count}"><i style="width:${Math.max(2, Math.min(100, Math.round((ui.union.count / unionGoal(ui.union.count)) * 100)))}%"></i></div>
       <p class="small">${ui.union.mine ? 'Seu apoio já conta.' : 'Seu apoio conta.'} Ninguém vê seu nome.</p>
       <button class="btn ${ui.union.mine ? 'out' : 'gold'}" data-action="union">${ui.union.mine ? 'Apoiando (tocar para retirar)' : 'Quero apoiar'}</button></div>` : ''}
-    <div class="unioncard how"><b>Como criar um sindicato</b>
+    <div class="unioncard how plain"><b>Como criar um sindicato</b>
       <p>Hoje não há sindicato da radiologia no Amazonas. Estes são os passos, resumidos:</p>
       <ol class="steps4">
         <li><span>1</span><div><b>Reunir a categoria.</b> Quanto mais gente apoiar, mais força. O contador acima ajuda.</div></li>
