@@ -717,7 +717,6 @@ html[data-theme=dark] .story .lbl{color:var(--text)}
 .stbtn.danger{background:#c0392b}
 .stfoot .stbtn:last-child{margin-left:auto}
 .stpanel{position:absolute;left:0;right:0;bottom:0;max-height:60%;overflow:auto;background:var(--card);color:var(--text);border-radius:20px 20px 0 0;padding:12px 16px 20px;z-index:5}
-.stpanel .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 10px}
 .stv-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2)}
 .stv-row span:nth-child(2){flex:1}.stv-row .zp{color:#f5b301;flex:none}
 .stv-row .avatar{width:32px;height:32px;font-size:12px}
@@ -813,7 +812,6 @@ html[data-theme=dark] .story .lbl{color:var(--text)}
 .sn-rec{display:block;font-size:11px;opacity:.75;margin:0 0 6px 2px}
 .snc.more{background:transparent;border:2px dashed #fff;color:#fff;display:flex;align-items:center;justify-content:center}
 .sn-pal{position:absolute;left:0;right:0;bottom:0;background:var(--card);color:var(--text);border-radius:22px 22px 0 0;padding:10px 16px 18px;z-index:10;box-shadow:0 -8px 30px rgba(0,0,0,.4)}
-.sn-pal .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 10px}
 .sn-palh{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:18px}
 .stx.dk{color:var(--text)}
 .sn-pages{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
@@ -853,3 +851,8 @@ html[data-theme=dark] .unioncard.plain b{color:var(--text)}html[data-theme=dark]
 html[data-theme=dark] .anonst{background:#22345a!important;color:#f5b301;box-shadow:0 0 0 2px #f5b301 inset}
 .sec,.usec{font-size:17px;font-weight:800;color:var(--text)}
 h3.usec{margin:20px 0 6px;text-transform:none;letter-spacing:0}
+.sn-dim{position:absolute;inset:0;z-index:9}
+.sn-hd{touch-action:none;cursor:grab;padding-bottom:2px}
+.sn-pal{transition:transform .2s ease,height .2s ease}
+.sn-pal.full{height:86%;display:flex;flex-direction:column}
+.sn-all{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(6,1fr);gap:14px 4px;justify-items:center;align-content:start;padding:6px 0 12px;-webkit-overflow-scrolling:touch}

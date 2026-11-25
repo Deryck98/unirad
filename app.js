@@ -358,7 +358,7 @@ function modalStory() {
   const body = s.image ? `<img class="stimg" src="${imgUrl(s.image)}" alt="" decoding="async">${s.text ? `<p class="stcap">${esc(s.text)}</p>` : ''}` : `<p class="sttext">${esc(s.text)}</p>`;
   const foot = s.mine ? `<button class="stbtn" data-action="st-views">${ic('eye', 18)} <span>${s.views || 0}</span>${s.zaps ? ` ${ic('bolt', 15)} <span>${s.zaps}</span>` : ''}</button><button class="stbtn ${sv.del ? 'danger' : ''}" data-action="st-del" aria-label="Apagar status">${ic('trash', 18)}${sv.del ? ' Toque de novo para apagar' : ''}</button>`
     : `<span class="stexp">Some em ${Math.max(1, Math.ceil((s.t + 86400000 - Date.now()) / 3600000))} h</span><button class="stzap ${s.zapped ? 'on' : ''}" data-action="st-zap" aria-label="Reagir com raio">${ic('bolt', 22)}</button>`;
-  const panel = sv.panel ? `<div class="stpanel"><div class="grab"></div><b>Quem viu</b>${!sv.viewers ? '<p class="muted small">Carregando…</p>' : sv.viewers.map((v) => `<div class="stv-row">${avatar(v.name, v.avatar, 'sm')}<span>${esc(v.name)}</span>${v.zap ? `<span class="zp">${ic('bolt', 14)}</span>` : ''}<small class="muted">${ago(v.t)}</small></div>`).join('') || '<p class="muted small">Ninguém viu ainda.</p>'}<button class="btn out" data-action="st-views">Fechar</button></div>` : '';
+  const panel = sv.panel ? `<div class="stpanel"><div class="grab"><i></i></div><b>Quem viu</b>${!sv.viewers ? '<p class="muted small">Carregando…</p>' : sv.viewers.map((v) => `<div class="stv-row">${avatar(v.name, v.avatar, 'sm')}<span>${esc(v.name)}</span>${v.zap ? `<span class="zp">${ic('bolt', 14)}</span>` : ''}<small class="muted">${ago(v.t)}</small></div>`).join('') || '<p class="muted small">Ninguém viu ainda.</p>'}<button class="btn out" data-action="st-views">Fechar</button></div>` : '';
   return `<div class="overlay stv" id="stv"><div class="stwrap sb${s.image ? 'x' : s.bg}"><div class="stprog">${bars}</div>
     <div class="sthead">${head}<button class="stx" data-action="close-modal" aria-label="Fechar">${ic('x', 22)}</button></div>
     <div class="stzone" id="stzone">${body}</div>
@@ -432,7 +432,10 @@ function modalStoryNew() {
     frame = `<div class="sn-frame cam ${n.facing === 'user' ? 'mir' : ''}">${n.camErr ? `<div class="sn-err"><p>Não consegui abrir a câmera aqui.</p><button class="btn" data-action="sn-native">Abrir câmera do celular</button></div>` : '<video id="snvideo" autoplay playsinline muted></video>'}<button class="sn-gl tl" data-action="close-modal" aria-label="Fechar">${sic('x')}</button><button class="sn-gl tr" data-action="sn-flip" aria-label="Virar câmera">${sic('flip')}</button><span class="sn-hint">Registre o plantão, o dia, o que quiser</span></div>`;
     bar = `<div class="sn-ctl"><button class="sn-gal" data-action="sn-gallery" aria-label="Escolher da galeria">${sic('img', 24)}</button><button class="sn-shut" data-action="sn-shoot" aria-label="Tirar foto"><i></i></button><span class="sn-gal ghost"></span></div>${modes}`;
   }
-  const pal = n.pal ? `<div class="sn-pal" id="snpal"><div class="grab"></div><div class="sn-palh"><b>Escolha uma cor</b><button class="stx dk" data-action="sn-palx" aria-label="Fechar">${ic('x', 20)}</button></div><div class="sn-pages" id="snpages">${[0, 1].map((pg) => `<div class="sn-page">${Array.from({ length: 24 }, (_, k) => pg * 24 + k).map((i) => `<button class="snc big sb${i} ${n.bg === i ? 'on' : ''}" data-action="sn-pick" data-v="${i}" aria-label="Cor ${i + 1}"></button>`).join('')}</div>`).join('')}</div><div class="sn-pdots"><i class="on"></i><i></i></div><p class="muted small center">Deslize para o lado para ver mais cores</p></div>` : '';
+  const btn = (i) => `<button class="snc big sb${i} ${n.bg === i ? 'on' : ''}" data-action="sn-pick" data-v="${i}" aria-label="Cor ${i + 1}"></button>`;
+  const pal = n.pal ? `<div class="sn-dim" data-action="sn-palx"></div><div class="sn-pal ${n.pal === 2 ? 'full' : ''}" id="snpal"><div class="sn-hd" id="snhd"><div class="grab"><i></i></div><div class="sn-palh"><b>Escolha uma cor</b><button class="stx dk" data-action="sn-palx" aria-label="Fechar">${ic('x', 20)}</button></div></div>${n.pal === 2
+    ? `<div class="sn-all">${Array.from({ length: STORY_BG_N }, (_, i) => btn(i)).join('')}</div><p class="muted small center">Deslize para baixo para voltar</p>`
+    : `<div class="sn-pages" id="snpages">${[0, 1].map((pg) => `<div class="sn-page">${Array.from({ length: 24 }, (_, k) => btn(pg * 24 + k)).join('')}</div>`).join('')}</div><div class="sn-pdots"><i class="on"></i><i></i></div><p class="muted small center">Deslize para o lado, ou para cima para ver todas</p>`}</div>` : '';
   return `<div class="overlay stv snew" id="snew">${frame}<div class="sn-bar">${bar}</div>${files}${pal}</div>`;
 }
 async function startCam() {
@@ -466,6 +469,18 @@ function bindSn() {
   if (a) a.addEventListener('change', () => pick(a)); if (c) c.addEventListener('change', () => pick(c));
   const t = document.getElementById('sntext'); if (t) t.addEventListener('input', () => { ui.sn.text = t.value; });
   const cp = document.getElementById('sncap'); if (cp) cp.addEventListener('input', () => { ui.sn.text = cp.value; });
+  const hd = document.getElementById('snhd'), pl = document.getElementById('snpal');
+  if (hd && pl) {
+    let y0 = null;
+    hd.addEventListener('pointerdown', (e) => { y0 = e.clientY; hd.setPointerCapture(e.pointerId); pl.style.transition = 'none'; });
+    hd.addEventListener('pointermove', (e) => { if (y0 === null) return; const dy = e.clientY - y0; if (dy > 0) pl.style.transform = `translateY(${dy}px)`; });
+    const end = (e) => {
+      if (y0 === null) return; const dy = e.clientY - y0; y0 = null; pl.style.transition = ''; pl.style.transform = '';
+      if (dy > 60) { ui.sn.pal = ui.sn.pal === 2 ? 1 : 0; snRender(); }
+      else if (dy < -60 && ui.sn.pal === 1) { ui.sn.pal = 2; snRender(); }
+    };
+    hd.addEventListener('pointerup', end); hd.addEventListener('pointercancel', () => { y0 = null; pl.style.transform = ''; });
+  }
   const pg = document.getElementById('snpages');
   if (pg) pg.addEventListener('scroll', () => { const k = Math.round(pg.scrollLeft / pg.clientWidth); document.querySelectorAll('.sn-pdots i').forEach((d, j) => d.classList.toggle('on', j === k)); }, { passive: true });
   startCam();
@@ -1266,9 +1281,9 @@ document.addEventListener('click', async (ev) => {
     if (a === 'del-demand') { try { await Store.deleteDemand(el.dataset.id); ui.demands = ui.demands.filter((x) => x.id !== el.dataset.id); render(); toast('Cobrança apagada.'); } catch (e) { toast(e.message); } return; }
     if (a === 'new-story') { ui.sn = { mode: 'foto', bg: recentBgs()[0], anon: !!(ui.user && ui.user.anon), text: '', blob: null, url: null, facing: 'environment', camErr: false }; return openModal('snew'); }
     if (a === 'st-bg') { ui.sn.bg = Number(el.dataset.v); snRender(); return; }
-    if (a === 'sn-pal') { ui.sn.pal = true; snRender(); return; }
-    if (a === 'sn-palx') { ui.sn.pal = false; snRender(); return; }
-    if (a === 'sn-pick') { ui.sn.bg = Number(el.dataset.v); pushRecentBg(ui.sn.bg); ui.sn.pal = false; snRender(); return; }
+    if (a === 'sn-pal') { ui.sn.pal = 1; snRender(); return; }
+    if (a === 'sn-palx') { ui.sn.pal = 0; snRender(); return; }
+    if (a === 'sn-pick') { ui.sn.bg = Number(el.dataset.v); pushRecentBg(ui.sn.bg); ui.sn.pal = 0; snRender(); return; }
     if (a === 'sn-anon') { ui.sn.anon = !ui.sn.anon; snRender(); return; }
     if (a === 'sn-mode') { if (ui.sn.mode === el.dataset.v) return; ui.sn.mode = el.dataset.v; ui.sn.blob = null; stopCam(); snRender(); return; }
     if (a === 'sn-flip') { ui.sn.facing = ui.sn.facing === 'user' ? 'environment' : 'user'; stopCam(); snRender(); return; }
