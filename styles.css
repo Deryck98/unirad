@@ -669,3 +669,11 @@ html[data-theme=dark] .annc span,html[data-theme=dark] .annc small{color:#f5c84a
 html[data-theme=dark] .steps4 li{color:#f3d98a}
 html[data-theme=dark] .steps4 li b{color:#fff3c4}
 html[data-theme=dark] .story .lbl{color:var(--text)}
+.rehead{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:0 0 6px}
+.rehead .linkname{font-weight:600;color:var(--muted)}
+.act.reposted{color:var(--blue)}
+.shrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px;border:1px solid var(--line2);border-radius:12px;margin-bottom:8px;background:var(--card);color:var(--text);text-decoration:none;min-height:56px}
+.shrow small{display:block;font-size:12px}
+.shic{flex:none;width:38px;height:38px;border-radius:10px;background:var(--soft);display:flex;align-items:center;justify-content:center}
+.shic.gold{background:#f5b301;color:#0b1f3a}
+.myposts{margin:10px -2px 0}

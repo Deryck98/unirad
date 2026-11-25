@@ -21,6 +21,7 @@ const logo = (s = 36) => emblem({ size: s, text: false });
 const ICONS = {
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  repeat: '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
@@ -102,10 +103,12 @@ function pollHtml(p) {
   }).join('')}<div class="muted small">${pl.total} ${pl.total === 1 ? 'voto' : 'votos'}${voted ? ' · toque na sua escolha para tirar o voto' : ' · escolha uma opção'}</div></div>`;
 }
 
+const findPost = (fn) => (ui.posts || []).find(fn) || (ui.myPosts || []).find(fn) || (ui.mySaved || []).find(fn);
 function postCard(p) {
   return `<article class="post">
     <div class="pcol">${avBtn(p.author, p.authorAvatar, p.authorId)}</div>
     <div class="pmain">
+      ${p.sharedBy ? `<div class="rehead">${ic('repeat', 15)}<button class="linkname" data-action="view-user" data-id="${p.sharedBy.id}">${esc(p.sharedBy.name)}</button> compartilhou</div>` : ''}
       <div class="phead">
         <div class="pwho"><span class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}</span>
           <span class="muted small"> · ${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</span>
@@ -120,7 +123,7 @@ function postCard(p) {
       <div class="actions">
         <button class="act ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}" aria-label="Curtir">${ic('bolt', 21)}<span>${p.likes || ''}</span></button>
         <button class="act" data-action="open-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 20)}<span>${p.comments.length || ''}</span></button>
-        <button class="act" data-action="share" data-id="${p.id}" aria-label="Compartilhar">${ic('share', 20)}</button>
+        <button class="act ${p.reposted ? 'reposted' : ''}" data-action="share-post" data-id="${p.id}" aria-label="Compartilhar">${ic('repeat', 20)}<span>${p.reposts || ''}</span></button>
       </div>
     </div>
   </article>`;
@@ -164,6 +167,13 @@ function richText(text, names) {
   return (out + plain(h.slice(last))).replace(/\n/g, '<br>');
 }
 function mentionHtml(text, names) { return richText(text, names); }
+function modalSharePost() {
+  const p = ui.sharePost; if (!p) return '';
+  const txt = `UniRad: ${String(p.text).slice(0, 140)}${p.text.length > 140 ? '…' : ''}\n${location.origin}`;
+  return sheet('Compartilhar', `${!p.mine && Store.mode === 'api' ? `<button class="shrow" data-action="repost" data-id="${p.id}"><span class="shic gold">${ic('repeat', 20)}</span><span><b>${p.reposted ? 'Compartilhado no UniRad' : 'Compartilhar no UniRad'}</b><small class="muted">${p.reposted ? 'Toque para desfazer' : 'Aparece no feed de quem segue você'}</small></span></button>` : ''}
+    <a class="shrow" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(txt)}" data-action="close-modal"><span class="shic">${ic('share', 20)}</span><span><b>Enviar por WhatsApp</b></span></a>
+    <button class="shrow" data-action="copy-link" data-url="${esc(location.origin)}"><span class="shic">${ic('copy', 20)}</span><span><b>Copiar link do app</b></span></button>`);
+}
 function modalLink() {
   const u = ui.linkUrl || '';
   return sheet('Você vai sair do UniRad', `<p class="muted small">Abra só links de quem você confia. Nunca informe senha ou dados de cartão.</p>
@@ -189,7 +199,7 @@ function commentsList(p) {
   return tops.map((c) => one(c, false)).join('') || '<div class="muted center pad8">Seja o primeiro a comentar.</div>';
 }
 function modalComments() {
-  const p = (ui.posts || []).find((x) => x.id === ui.cpost);
+  const p = findPost((x) => x.id === ui.cpost);
   if (!p) return '';
   return `<div class="overlay" id="cov" data-action="close-modal"><div class="sheet csheet" role="dialog" aria-label="Comentários" data-stop="1" id="csheet">
     <div class="grab" id="cgrab"><i></i></div><div class="ctitle">Comentários</div>
@@ -202,7 +212,7 @@ function modalComments() {
         <button class="csend" type="submit">Enviar</button></div></form></div></div>`;
 }
 function updateComments() {
-  const p = (ui.posts || []).find((x) => x.id === ui.cpost), l = document.getElementById('clist');
+  const p = findPost((x) => x.id === ui.cpost), l = document.getElementById('clist');
   if (!p || !l) return;
   l.innerHTML = commentsList(p);
   const cs = document.querySelector(`.act[data-action="open-comments"][data-id="${p.id}"] span`);
@@ -617,6 +627,19 @@ function profileForm(u) {
     </form>`;
 }
 function modalEditProfile() { return sheet('Editar perfil', profileForm(ui.user)); }
+async function loadMyPosts() {
+  if (Store.mode !== 'api' || !ui.user) return;
+  const id = ui.user.id;
+  try {
+    if (!ui.myPosts) { ui.myPosts = (await Store.userPosts(id)).posts; if (ui.tab === 'perfil') render(); }
+  } catch { ui.myPosts = []; if (ui.tab === 'perfil') render(); }
+}
+function myPostsSection() {
+  const list = ui.myPosts;
+  if (!list) loadMyPosts();
+  return `<h4 class="usec" style="margin:16px 4px 6px">Suas publicações</h4>
+    <div class="myposts">${!list ? '<p class="muted small center pad8">Carregando…</p>' : list.map(postCard).join('') || '<p class="muted small center pad8">Suas publicações abertas aparecem aqui.</p>'}</div>`;
+}
 function screenProfile() {
   const u = ui.user, api = Store.mode === 'api';
   const row = (act, label, cls = '') => `<button class="lrow ${cls}" data-action="${act}"><span>${label}</span>${ic('chev', 18)}</button>`;
@@ -629,6 +652,8 @@ function screenProfile() {
       ${api && u.posts !== undefined ? `<div class="pstats"><div><b>${u.posts}</b><span>${u.posts === 1 ? 'post' : 'posts'}</span></div><div><b>${u.bolts}</b><span>${u.bolts === 1 ? 'raio' : 'raios'}</span></div></div>` : ''}
       <div class="prow"><button class="btn out" data-action="edit-profile">Editar perfil</button><button class="btn out" data-action="invite">Convidar</button></div>
     </section>
+    ${api ? myPostsSection() : ''}
+    <h4 class="usec" style="margin:18px 4px 6px">Configurações</h4>
     <div class="list">
       <div class="lrow themerow"><span>Aparência</span><div class="segtabs" role="group" aria-label="Aparência">${[['claro', 'Claro'], ['escuro', 'Escuro'], ['auto', 'Automático']].map(([v, l]) => `<button type="button" class="${getTheme() === v ? 'on' : ''}" data-action="theme" data-v="${v}">${l}</button>`).join('')}</div></div>
       <label class="lrow"><span>Começar posts como anônimo</span><input type="checkbox" class="sw" data-action="toggle-anon" ${u.anon ? 'checked' : ''}></label>
@@ -850,7 +875,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom)'); if (ov) ov.classList.add('enter'); }
   ui.prevModal = ui.modal;
@@ -872,6 +897,8 @@ async function refresh({ quiet = false } = {}) {
       const [stats, pl, co] = await Promise.all([Store.stats(scope), Store.places(scope).catch(() => ({ places: [] })), Store.companies().catch(() => ({ companies: [] }))]);
       if (seq !== ui.seq) return;
       ui.stats = stats; ui.places = pl.places; ui.companies = co.companies;
+    } else if (ui.tab === 'perfil') {
+      ui.myPosts = null; ui.mySaved = null; render(); return;
     } else if (ui.tab === 'direitos') {
       render();
       if (Store.mode === 'api') { try { const [u, cn] = await Promise.all([Store.union(), Store.councils().catch(() => ({ councils: [] }))]); ui.union = u; ui.councils = cn.councils; if (ui.tab === 'direitos') render(); } catch { /* ignorado */ } }
@@ -1096,6 +1123,16 @@ document.addEventListener('click', async (ev) => {
       try { const r = await Store.supportDemand(d.id); d.sup = r.sup; d.n = r.n; render(); } catch (e) { toast(e.message); } return;
     }
     if (a === 'del-demand') { try { await Store.deleteDemand(el.dataset.id); ui.demands = ui.demands.filter((x) => x.id !== el.dataset.id); render(); toast('Cobrança apagada.'); } catch (e) { toast(e.message); } return; }
+    if (a === 'share-post') { const p = findPost((x) => x.id === el.dataset.id); if (!p) return; ui.sharePost = p; return openModal('sharepost'); }
+    if (a === 'repost') {
+      const p = ui.sharePost; if (!p) return;
+      try {
+        const r = await Store.repost(p.id);
+        for (const arr of [ui.posts, ui.myPosts, ui.mySaved, ui.userPosts]) for (const x of arr || []) if (x.id === p.id) { x.reposted = r.reposted; x.reposts = r.reposts; }
+        closeModal(); toast(r.reposted ? 'Compartilhado com quem segue você.' : 'Compartilhamento desfeito.');
+      } catch (e) { toast(e.message); }
+      return;
+    }
     if (a === 'open-link') { ui.linkUrl = el.dataset.url; return openOver('link'); }
     if (a === 'link-opened') { return closeModal(); }
     if (a === 'copy-link') {
@@ -1147,7 +1184,7 @@ document.addEventListener('click', async (ev) => {
     }
     if (a === 'dyear') { ui.dy = Math.min(new Date().getFullYear(), ui.dy + Number(el.dataset.d)); if (ui.dy < 2000) ui.dy = 2000; updateDelayCal(); return; }
     if (a === 'vote') {
-      const p = (ui.posts || []).find((x) => x.id === el.dataset.id); const i = Number(el.dataset.i);
+      const p = findPost((x) => x.id === el.dataset.id); const i = Number(el.dataset.i);
       if (p && p.poll) {
         const pl = p.poll;
         if (pl.voted !== null && pl.voted !== undefined) { pl.options[pl.voted].n--; pl.total--; }
@@ -1191,8 +1228,8 @@ document.addEventListener('click', async (ev) => {
     if (a === 'new-poll') { ui.postCat = 'enquete'; ui.photoBlob = null; return openModal('post'); }
     if (a === 'edit-profile') return openModal('editprofile');
     if (a === 'chip') { const sel = document.getElementById(el.dataset.for); sel.value = el.dataset.v; sel.dispatchEvent(new Event('change')); el.parentElement.querySelectorAll('.chip2').forEach((b) => b.classList.toggle('on', b === el)); return; }
-    if (a === 'menu-post') { const p = (ui.posts || []).find((x) => x.id === el.dataset.id); if (p) { ui.menu = { kind: 'post', id: p.id, mine: !!p.mine, text: p.text }; openModal('menu'); } return; }
-    if (a === 'menu-comment') { const p = (ui.posts || []).find((x) => x.id === el.dataset.pid); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (c) { ui.menu = { kind: 'comment', id: c.id, mine: true, text: c.text }; openModal('menu'); } return; }
+    if (a === 'menu-post') { const p = findPost((x) => x.id === el.dataset.id); if (p) { ui.menu = { kind: 'post', id: p.id, mine: !!p.mine, text: p.text }; openModal('menu'); } return; }
+    if (a === 'menu-comment') { const p = findPost((x) => x.id === el.dataset.pid); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (c) { ui.menu = { kind: 'comment', id: c.id, mine: true, text: c.text }; openModal('menu'); } return; }
     if (a === 'menu-edit') { const m = ui.menu; ui.editPost = { type: m.kind, id: m.id, text: m.text }; ui.modal = 'edit'; return render(); }
     if (a === 'menu-report') { const m = ui.menu; closeModal(); if (confirm('Denunciar esta publicação por ofensa ou dados de paciente?')) { await Store.report(m.id); toast('Denúncia enviada. Obrigado.'); refresh({ quiet: true }); } return; }
     if (a === 'menu-delete') {
@@ -1208,7 +1245,7 @@ document.addEventListener('click', async (ev) => {
     if (a === 'remove-avatar') { await Store.saveProfile({ avatar: '' }); ui.user.avatar = ''; return render(); }
     if (a === 'ask-delete') return openModal('delete');
     if (a === 'like') {
-      const p = (ui.posts || []).find((x) => x.id === el.dataset.id); if (!p) return;
+      const p = findPost((x) => x.id === el.dataset.id); if (!p) return;
       if (el.dataset.busy) return;
       const flip = () => { p.liked = !p.liked; p.likes = Math.max(0, p.likes + (p.liked ? 1 : -1)); el.classList.toggle('liked', p.liked); el.querySelector('span').textContent = p.likes || ''; };
       flip(); el.classList.remove('pop'); void el.offsetWidth; if (p.liked) el.classList.add('pop');
@@ -1230,7 +1267,7 @@ document.addEventListener('click', async (ev) => {
     if (a === 'toggle-replies') { ui.rep[el.dataset.id] = !ui.rep[el.dataset.id]; return updateComments(); }
     if (a === 'toggle-canon') { ui.cAnon = !ui.cAnon; el.classList.toggle('on', ui.cAnon); const ci = document.getElementById('cin'); if (ci) ci.focus(); return; }
     if (a === 'like-comment') {
-      const p = (ui.posts || []).find((x) => x.id === ui.cpost); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (!c) return;
+      const p = findPost((x) => x.id === ui.cpost); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (!c) return;
       const flip = () => { c.liked = !c.liked; c.likes = Math.max(0, (c.likes || 0) + (c.liked ? 1 : -1)); };
       flip(); updateComments();
       try { await Store.likeComment(c.id); } catch (e) { flip(); updateComments(); toast(e.message); }
@@ -1366,7 +1403,7 @@ document.addEventListener('submit', async (ev) => {
     }
     if (kind === 'comment') {
       const inp = document.getElementById('cin'), t = inp.value.trim(); if (!t) return;
-      const p = (ui.posts || []).find((x) => x.id === f.dataset.id); if (!p) return;
+      const p = findPost((x) => x.id === f.dataset.id); if (!p) return;
       const parent = ui.replyTo ? ui.replyTo.id : null, btn = f.querySelector('.csend');
       btn.disabled = true;
       try { await Store.addComment(p.id, t, ui.cAnon, parent); } finally { btn.disabled = false; }
@@ -1418,7 +1455,7 @@ function showSplash() {
 /* menções: digitar @ mostra as pessoas da conversa */
 document.addEventListener('input', (ev) => {
   if (ev.target.id !== 'cin') return;
-  const ml = document.getElementById('mlist'), p = (ui.posts || []).find((x) => x.id === ui.cpost); if (!ml || !p) return;
+  const ml = document.getElementById('mlist'), p = findPost((x) => x.id === ui.cpost); if (!ml || !p) return;
   const ci = ev.target, m = ci.value.slice(0, ci.selectionStart).match(/(^|\s)@([^\s@]*)$/);
   if (!m) { ml.hidden = true; return; }
   const q = m[2].toLowerCase(), list = threadNames(p).filter((n) => n.toLowerCase().includes(q)).slice(0, 5);

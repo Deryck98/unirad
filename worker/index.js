@@ -157,6 +157,7 @@ async function deleteAccount(req, env, user) {
     env.DB.prepare('DELETE FROM likes WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM reports WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM poll_votes WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
+    env.DB.prepare('DELETE FROM reposts WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM posts WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM delays WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').bind(id, id),
@@ -221,16 +222,34 @@ async function listPosts(url, env, user) {
     catSql = ' AND p.cat = ?'; args.push(cat);
   }
   const before = Number(url.searchParams.get('before')) || 0;
+  const sharedQ = url.searchParams.get('shared') === '1' && !!authorQ;
+  const visibleSql = "(SELECT is_private FROM users uu WHERE uu.id = p.user_id) = 0 OR p.user_id = ? OR EXISTS (SELECT 1 FROM follows ff WHERE ff.follower_id = ? AND ff.followee_id = p.user_id AND ff.status = 'ok')";
+  const baseCols = 'p.id, p.cat, p.scope, p.region, p.anon, p.author_name, p.text, p.place, p.salary, p.poll, p.image, p.created_at, p.user_id';
+  let inner, iargs;
+  if (sharedQ) {
+    inner = `SELECT ${baseCols}, r.user_id AS shared_by, r.created_at AS sort_at FROM reposts r JOIN posts p ON p.id = r.post_id WHERE r.user_id = ?${catSql} AND (${visibleSql})`;
+    iargs = [authorQ, ...args.slice(1 + sc.args.length), user.id, user.id];
+  } else if (scopeQ === 'seguindo' && !authorQ) {
+    inner = `SELECT ${baseCols}, NULL AS shared_by, p.created_at AS sort_at FROM posts p WHERE ${sc.sql}${catSql}
+      UNION ALL SELECT ${baseCols}, r.user_id AS shared_by, r.created_at AS sort_at FROM reposts r JOIN posts p ON p.id = r.post_id WHERE r.user_id IN (SELECT followee_id FROM follows WHERE follower_id = ? AND status = 'ok')${catSql} AND (${visibleSql})`;
+    iargs = [...args.slice(1), user.id, ...args.slice(1 + sc.args.length), user.id, user.id];
+  } else {
+    inner = `SELECT ${baseCols}, NULL AS shared_by, p.created_at AS sort_at FROM posts p WHERE ${sc.sql}${catSql}`;
+    iargs = args.slice(1);
+  }
   let beforeSql = '';
-  if (before) { beforeSql = ' AND p.created_at < ?'; args.push(before); }
+  const oargs = [user.id, user.id];
+  if (before) { beforeSql = ' AND p.sort_at < ?'; oargs.push(before); }
   const rows = await env.DB.prepare(
-    `SELECT p.id, p.cat, p.scope, p.region, p.anon, p.author_name, p.text, p.place, p.salary, p.poll, p.image, p.created_at, p.user_id, (SELECT avatar FROM users u WHERE u.id = p.user_id) AS avatar,
+    `SELECT p.*, (SELECT avatar FROM users u WHERE u.id = p.user_id) AS avatar, (SELECT name FROM users u WHERE u.id = p.shared_by) AS shared_name,
       (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes,
-      EXISTS (SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked
-     FROM posts p
-     WHERE ${sc.sql}${catSql}${beforeSql} AND (SELECT COUNT(*) FROM reports r WHERE r.post_id = p.id) < ${HIDE_AFTER_REPORTS}
-     ORDER BY p.created_at DESC LIMIT ${PAGE + 1}`
-  ).bind(...args).all();
+      EXISTS (SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked,
+      (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id = p.id) AS reposts,
+      EXISTS (SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = ?) AS reposted
+     FROM (${inner}) p
+     WHERE (SELECT COUNT(*) FROM reports r WHERE r.post_id = p.id) < ${HIDE_AFTER_REPORTS}${beforeSql}
+     ORDER BY p.sort_at DESC LIMIT ${PAGE + 1}`
+  ).bind(...oargs.slice(0, 2), ...iargs, ...oargs.slice(2)).all();
   const more = rows.results.length > PAGE;
   const posts = rows.results.slice(0, PAGE);
   const byId = new Map(posts.map((p) => [p.id, []]));
@@ -263,7 +282,8 @@ async function listPosts(url, env, user) {
     posts: posts.map((p) => ({
       id: p.id, cat: p.cat, scope: p.scope, region: p.region,
       author: p.anon ? 'Profissional anônimo' : p.author_name, authorId: p.anon ? null : p.user_id, authorAvatar: p.anon ? null : (p.avatar || null), image: p.image || null,
-      text: p.text, place: p.place || '', salary: p.salary || '', t: p.created_at,
+      text: p.text, place: p.place || '', salary: p.salary || '', t: p.shared_by ? p.sort_at : p.created_at, origT: p.created_at,
+      sharedBy: p.shared_by ? { id: p.shared_by, name: p.shared_name || 'Profissional' } : null, reposts: p.reposts, reposted: !!p.reposted,
       likes: p.likes, liked: !!p.liked, mine: p.user_id === user.id, comments: byId.get(p.id) || [], poll: p.pollOut || null
     })),
     more
@@ -382,6 +402,24 @@ async function toggleLike(env, user, id) {
   return json({ ok: true });
 }
 
+async function toggleRepost(env, user, id) {
+  const po = await env.DB.prepare('SELECT user_id, text, anon FROM posts WHERE id = ?').bind(id).first();
+  if (!po) throw new HttpError(404, 'Publicação não encontrada.');
+  if (po.user_id === user.id) throw bad('Suas publicações já aparecem no seu perfil.');
+  const del = await env.DB.prepare('DELETE FROM reposts WHERE post_id = ? AND user_id = ?').bind(id, user.id).run();
+  let reposted = false;
+  if (!del.meta.changes) {
+    const au = await env.DB.prepare('SELECT is_private FROM users WHERE id = ?').bind(po.user_id).first();
+    if (au && au.is_private) throw new HttpError(403, 'Esta publicação é de um perfil privado e não pode ser compartilhada.');
+    await rateLimit(env, 'reposts', user.id, 30, DAY);
+    await env.DB.prepare('INSERT INTO reposts (post_id, user_id, created_at) VALUES (?, ?, ?)').bind(id, user.id, Date.now()).run();
+    reposted = true;
+    await notify(env, { to: po.user_id, type: 'repost', ref: id, snippet: po.text });
+  }
+  const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM reposts WHERE post_id = ?').bind(id).first()).n;
+  return json({ reposted, reposts: n });
+}
+
 async function votePoll(req, env, user, id) {
   const b = await readJson(req);
   const row = await env.DB.prepare('SELECT poll FROM posts WHERE id = ?').bind(id).first();
@@ -438,6 +476,7 @@ async function deletePost(env, user, id) {
     env.DB.prepare('DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)').bind(id),
     env.DB.prepare('DELETE FROM comments WHERE post_id = ?').bind(id),
     env.DB.prepare('DELETE FROM likes WHERE post_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM reposts WHERE post_id = ?').bind(id),
     env.DB.prepare('DELETE FROM reports WHERE post_id = ?').bind(id),
     env.DB.prepare('DELETE FROM poll_votes WHERE post_id = ?').bind(id),
     env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(id)
@@ -839,7 +878,7 @@ export default {
         ]);
         return json({ ok: true });
       }
-      const pm = p.match(/^\/api\/posts\/([0-9a-f-]{36})(?:\/(like|comments|report|vote))?$/);
+      const pm = p.match(/^\/api\/posts\/([0-9a-f-]{36})(?:\/(like|repost|comments|report|vote))?$/);
       if (pm) {
         const [, id, action] = pm;
         if (!action && m === 'DELETE') return await deletePost(env, user, id);
@@ -852,6 +891,7 @@ export default {
           return json({ ok: true });
         }
         if (action === 'like' && m === 'POST') return await toggleLike(env, user, id);
+        if (action === 'repost' && m === 'POST') return await toggleRepost(env, user, id);
         if (action === 'comments' && m === 'POST') return await addComment(req, env, user, id);
         if (action === 'report' && m === 'POST') return await reportPost(env, user, id);
         if (action === 'vote' && m === 'POST') return await votePoll(req, env, user, id);
