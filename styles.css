@@ -852,7 +852,7 @@ html[data-theme=dark] .anonst{background:#22345a!important;color:#f5b301;box-sha
 .sec,.usec{font-size:17px;font-weight:800;color:var(--text)}
 h3.usec{margin:20px 0 6px;text-transform:none;letter-spacing:0}
 .sn-dim{position:absolute;inset:0;z-index:9}
-.sn-hd{touch-action:none;cursor:grab;padding-bottom:2px}
+.sn-hd{padding-bottom:2px}
 .sn-pal{transition:transform .2s ease,height .2s ease}
 .sn-pal.full{height:86%;display:flex;flex-direction:column}
 .sn-all{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(6,1fr);gap:14px 4px;justify-items:center;align-content:start;padding:6px 0 12px;-webkit-overflow-scrolling:touch}

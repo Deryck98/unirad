@@ -391,6 +391,8 @@ function bindStory() {
   const cur = ov.querySelector('[data-cur]');
   if (cur) cur.addEventListener('animationend', () => { if (ui.sv) stNext(); });
   if (ui.sv && ui.sv.panel) ov.classList.add('paused');
+  const sp = ov.querySelector('.stpanel');
+  if (sp) bindSwipeDown(sp, () => { if (!ui.sv) return; ui.sv.panel = false; const o = document.getElementById('stv'); if (o) { o.outerHTML = modalStory(); bindStory(); } }, 'button');
   let t0 = 0, x0 = 0, y0 = 0;
   z.addEventListener('pointerdown', (e) => { t0 = Date.now(); x0 = e.clientX; y0 = e.clientY; ov.classList.add('paused'); });
   const up = (e) => {
@@ -435,7 +437,7 @@ function modalStoryNew() {
   const btn = (i) => `<button class="snc big sb${i} ${n.bg === i ? 'on' : ''}" data-action="sn-pick" data-v="${i}" aria-label="Cor ${i + 1}"></button>`;
   const pal = n.pal ? `<div class="sn-dim" data-action="sn-palx"></div><div class="sn-pal ${n.pal === 2 ? 'full' : ''}" id="snpal"><div class="sn-hd" id="snhd"><div class="grab"><i></i></div><div class="sn-palh"><b>Escolha uma cor</b><button class="stx dk" data-action="sn-palx" aria-label="Fechar">${ic('x', 20)}</button></div></div>${n.pal === 2
     ? `<div class="sn-all">${Array.from({ length: STORY_BG_N }, (_, i) => btn(i)).join('')}</div><p class="muted small center">Deslize para baixo para voltar</p>`
-    : `<div class="sn-pages" id="snpages">${[0, 1].map((pg) => `<div class="sn-page">${Array.from({ length: 24 }, (_, k) => btn(pg * 24 + k)).join('')}</div>`).join('')}</div><div class="sn-pdots"><i class="on"></i><i></i></div><p class="muted small center">Deslize para o lado, ou para cima para ver todas</p>`}</div>` : '';
+    : `<div class="sn-pages" id="snpages">${[0, 1].map((pg) => `<div class="sn-page">${Array.from({ length: 24 }, (_, k) => btn(pg * 24 + k)).join('')}</div>`).join('')}</div><div class="sn-pdots"><i class="on"></i><i></i></div><p class="muted small center">Deslize para o lado ou para cima</p>`}</div>` : '';
   return `<div class="overlay stv snew" id="snew">${frame}<div class="sn-bar">${bar}</div>${files}${pal}</div>`;
 }
 async function startCam() {
@@ -469,17 +471,30 @@ function bindSn() {
   if (a) a.addEventListener('change', () => pick(a)); if (c) c.addEventListener('change', () => pick(c));
   const t = document.getElementById('sntext'); if (t) t.addEventListener('input', () => { ui.sn.text = t.value; });
   const cp = document.getElementById('sncap'); if (cp) cp.addEventListener('input', () => { ui.sn.text = cp.value; });
-  const hd = document.getElementById('snhd'), pl = document.getElementById('snpal');
-  if (hd && pl) {
-    let y0 = null;
-    hd.addEventListener('pointerdown', (e) => { y0 = e.clientY; hd.setPointerCapture(e.pointerId); pl.style.transition = 'none'; });
-    hd.addEventListener('pointermove', (e) => { if (y0 === null) return; const dy = e.clientY - y0; if (dy > 0) pl.style.transform = `translateY(${dy}px)`; });
+  const fr = ov.querySelector('.sn-frame');
+  if (fr) bindSwipeDown(fr, () => { if (ui.sn && ui.sn.pal) return; stopCam(); closeModal(); }, 'input, select, button');
+  const pl = document.getElementById('snpal');
+  if (pl) {
+    let x0 = 0, y0 = 0, mode = null;
+    pl.addEventListener('touchstart', (e) => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; mode = null; pl.style.transition = 'none'; }, { passive: true });
+    pl.addEventListener('touchmove', (e) => {
+      const t = e.touches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+      if (!mode) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dy) <= Math.abs(dx)) mode = 'native';
+        else if (ui.sn.pal === 2) { const all = pl.querySelector('.sn-all'); mode = dy > 0 && all && all.scrollTop <= 0 ? 'drag' : 'native'; }
+        else mode = 'drag';
+      }
+      if (mode === 'drag') { e.preventDefault(); if (dy > 0) pl.style.transform = `translateY(${dy}px)`; }
+    }, { passive: false });
     const end = (e) => {
-      if (y0 === null) return; const dy = e.clientY - y0; y0 = null; pl.style.transition = ''; pl.style.transform = '';
+      pl.style.transition = ''; pl.style.transform = '';
+      const m = mode; mode = null; if (m !== 'drag') return;
+      const dy = (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : y0) - y0;
       if (dy > 60) { ui.sn.pal = ui.sn.pal === 2 ? 1 : 0; snRender(); }
       else if (dy < -60 && ui.sn.pal === 1) { ui.sn.pal = 2; snRender(); }
     };
-    hd.addEventListener('pointerup', end); hd.addEventListener('pointercancel', () => { y0 = null; pl.style.transform = ''; });
+    pl.addEventListener('touchend', end); pl.addEventListener('touchcancel', () => { mode = null; pl.style.transform = ''; pl.style.transition = ''; });
   }
   const pg = document.getElementById('snpages');
   if (pg) pg.addEventListener('scroll', () => { const k = Math.round(pg.scrollLeft / pg.clientWidth); document.querySelectorAll('.sn-pdots i').forEach((d, j) => d.classList.toggle('on', j === k)); }, { passive: true });
@@ -1109,6 +1124,24 @@ function showPhotoPrev() {
   img.src = URL.createObjectURL(ui.photoBlob);
   document.getElementById('photoPrev').hidden = false; document.getElementById('photoBtn').hidden = true;
 }
+/* Deslizar para baixo em qualquer ponto fecha (padrão do app). ignore = seletor de onde não vale. */
+function bindSwipeDown(el, onClose, ignore = 'input, select') {
+  if (!el || el.dataset.swd) return; el.dataset.swd = '1';
+  let y0 = null, x0 = 0, active = false;
+  el.addEventListener('touchstart', (e) => { const ta = e.target.closest('textarea'); if (e.touches.length !== 1 || e.target.closest(ignore) || (ta && ta.scrollHeight > ta.clientHeight + 2)) { y0 = null; return; } y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; active = false; }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    if (y0 === null) return; const dy = e.touches[0].clientY - y0, dx = e.touches[0].clientX - x0;
+    if (!active) { if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) { y0 = null; return; } if (dy > 10) active = true; else return; }
+    e.preventDefault(); el.style.transition = 'none'; el.style.transform = `translateY(${Math.max(0, dy)}px)`; el.style.opacity = String(Math.max(0.4, 1 - dy / 500));
+  }, { passive: false });
+  const end = (e) => {
+    if (!active) { y0 = null; return; }
+    const dy = (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : y0) - y0; y0 = null; active = false;
+    el.style.transition = 'transform .2s, opacity .2s';
+    if (dy > 100) { el.style.transform = 'translateY(100%)'; el.style.opacity = '0'; setTimeout(onClose, 150); } else { el.style.transform = ''; el.style.opacity = ''; }
+  };
+  el.addEventListener('touchend', end); el.addEventListener('touchcancel', () => { y0 = null; active = false; el.style.transform = ''; el.style.opacity = ''; });
+}
 function bindSheetDrag(sid, scrollId) {
   const s = document.getElementById(sid); if (!s) return;
   const sc = scrollId ? document.getElementById(scrollId) : s;
@@ -1151,6 +1184,7 @@ if (window.visualViewport) { window.visualViewport.addEventListener('resize', fi
 function bindModal() {
   if (ui.modal === 'story') bindStory();
   if (ui.modal === 'snew') bindSn();
+  if (ui.modal === 'zoom') bindSwipeDown($app.querySelector('.overlay.zoom'), closeModal);
   bindSheetDrag('msheet'); bindSheetDrag('csheet', 'clist'); bindSheetDrag('gsheet'); fitSheet();
   const pin = document.getElementById('photoIn');
   if (pin) {
