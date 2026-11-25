@@ -34,6 +34,14 @@ const api = {
   stats(scope) { return call('GET', '/stats?scope=' + encodeURIComponent(scope)); },
   posts({ scope, cat, before }) { return call('GET', `/posts?scope=${encodeURIComponent(scope)}&cat=${cat || 'tudo'}${before ? '&before=' + before : ''}`); },
   vote(id, opt) { return call('POST', `/posts/${id}/vote`, { opt }); },
+  async upload(blob) {
+    let res;
+    try { res = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type || 'image/jpeg' }, body: blob }); }
+    catch { throw new Error('Sem conexão. Verifique a internet e tente de novo.'); }
+    let data = null; try { data = await res.json(); } catch { /* sem corpo */ }
+    if (!res.ok) throw new Error((data && data.error) || 'Não consegui enviar a foto.');
+    return data.key;
+  },
   addPost(p) { return call('POST', '/posts', p); },
   toggleLike(id) { return call('POST', `/posts/${id}/like`); },
   addComment(id, text, anon) { return call('POST', `/posts/${id}/comments`, { text, anon }); },
@@ -71,6 +79,7 @@ const demo = {
       comments: p.comments.map((c) => ({ id: c.id, author: c.author, text: c.text, t: c.t })), poll: null
     })) };
   },
+  async upload() { throw new Error('Fotos só funcionam na versão completa.'); },
   async addPost(p) { L.addPost({ cat: p.cat, scope: p.scope, region: L.user.region, anon: !!p.anon, author: p.anon ? 'Profissional anônimo' : L.user.name, text: p.text, place: p.place || '', salary: p.salary || '' }); },
   async toggleLike(id) { L.toggleLike(id); },
   async addComment(id, text, anon) { L.addComment(id, text, anon ? 'Profissional anônimo' : L.user.name); },

@@ -12,3 +12,7 @@ binding = "DB"
 database_name = "unirad-db"
 database_id = "20256723-3cd4-4ac0-b26e-c9e0a11e10a8"
 migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "unirad-fotos"

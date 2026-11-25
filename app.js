@@ -4,7 +4,7 @@ import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 let Store = null;
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -52,17 +52,18 @@ function viewSwitch() {
   const other = REGIONS.filter((r) => r.id !== ui.user.region)
     .map((r) => `<option value="${r.id}" ${String(ui.view) === String(r.id) ? 'selected' : ''}>${esc(r.name)}${r.states ? ' · ' + esc(r.states) : ''}</option>`).join('');
   const isOther = /^\d+$/.test(String(ui.view));
-  return `<div class="switch">
-    <button class="seg ${ui.view === 'mine' ? 'on' : ''}" data-action="view" data-v="mine">Minha região</button>
-    <button class="seg ${ui.view === 'brasil' ? 'on' : ''}" data-action="view" data-v="brasil">Brasil todo</button>
-    <select class="seg sel ${isOther ? 'on' : ''}" data-action="view-select" aria-label="Ver outra região"><option value="">Outra região</option>${other}</select>
+  return `<div class="vtabs">
+    <button class="${ui.view === 'mine' ? 'on' : ''}" data-action="view" data-v="mine"><span>Minha região</span></button>
+    <button class="${ui.view === 'brasil' ? 'on' : ''}" data-action="view" data-v="brasil"><span>Brasil todo</span></button>
+    <label class="${isOther ? 'on' : ''}"><span>${isOther ? esc(viewName(ui.view)) : 'Outra região'} ▾</span><select data-action="view-select" aria-label="Ver outra região"><option value="">Outra região</option>${other}</select></label>
   </div>`;
 }
 
-const INVITE = () => `Estou no UniRad, a rede dos técnicos e tecnólogos em radiologia, por piso, jornada e salário em dia. Entre com seu CRTR: ${location.origin}`;
 const initials = (n) => String(n).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 const isAnon = (n) => n === 'Profissional anônimo';
-const avatar = (n) => (isAnon(n) ? `<div class="avatar">${ic('user', 18)}</div>` : `<div class="avatar ini">${esc(initials(n))}</div>`);
+const imgUrl = (k) => `/api/img/${encodeURIComponent(k)}`;
+const INVITE = () => `Estou no UniRad, a rede dos técnicos e tecnólogos em radiologia, por piso, jornada e salário em dia. Entre com seu CRTR: ${location.origin}`;
+const avatar = (n, key, cls = '') => (isAnon(n) ? `<div class="avatar ${cls}">${ic('user', 18)}</div>` : key ? `<img class="avatar ${cls}" src="${imgUrl(key)}" alt="" loading="lazy" decoding="async">` : `<div class="avatar ini ${cls}">${esc(initials(n))}</div>`);
 
 function pollHtml(p) {
   const pl = p.poll;
@@ -78,34 +79,38 @@ function pollHtml(p) {
 
 function postCard(p) {
   const open = ui.open[p.id];
-  return `<article class="card post">
-    <div class="row gap8 head">
-      ${avatar(p.author)}
-      <div class="grow"><div class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}${p.sample ? ' <span class="tag">exemplo</span>' : ''}${p.mine && isAnon(p.author) ? ' <span class="tag you">só você sabe</span>' : ''}</div>
-        <div class="muted small">${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</div></div>
-      <span class="chip c-${p.cat}">${CATS[p.cat]}</span>
+  return `<article class="post">
+    <div class="pcol">${avatar(p.author, p.authorAvatar)}</div>
+    <div class="pmain">
+      <div class="phead">
+        <div class="pwho"><span class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}</span>
+          <span class="muted small"> · ${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</span>
+          ${p.sample ? '<span class="tag">exemplo</span>' : ''}${p.mine && isAnon(p.author) ? '<span class="tag you">só você sabe</span>' : ''}</div>
+        ${p.mine ? `<button class="more" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button>` : `<button class="more" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 16)}</button>`}
+      </div>
+      ${p.cat !== 'geral' ? `<span class="chip c-${p.cat}">${CATS[p.cat]}</span>` : ''}
+      <p class="body">${esc(p.text).replace(/\n/g, '<br>')}</p>
+      ${p.image ? `<button class="pimgwrap" data-action="zoom" data-src="${esc(imgUrl(p.image))}" aria-label="Ampliar foto"><img class="pimg" src="${imgUrl(p.image)}" alt="Foto da publicação" loading="lazy" decoding="async"></button>` : ''}
+      ${pollHtml(p)}
+      ${p.place || p.salary ? `<div class="meta">${p.place ? `<span>${ic('briefcase', 14)} ${esc(p.place)}</span>` : ''}${p.salary ? `<span>Salário: ${esc(p.salary)}</span>` : ''}</div>` : ''}
+      <div class="actions">
+        <button class="act" data-action="toggle-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 20)}<span>${p.comments.length || ''}</span></button>
+        <button class="act ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}" aria-label="Curtir">${ic('heart', 20)}<span>${p.likes || ''}</span></button>
+        <button class="act" data-action="share" data-id="${p.id}" aria-label="Compartilhar">${ic('share', 20)}</button>
+      </div>
+      ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm">${avatar(c.author, null, 'sm')}<div class="bubble"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div></div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
+        <form data-form="comment" data-id="${p.id}"><div class="row gap8"><input name="t" maxlength="300" placeholder="Escreva um comentário" required autocomplete="off"><button class="btn small" type="submit">Enviar</button></div>
+          <label class="check mini"><input type="checkbox" name="anon" ${ui.user.anon ? 'checked' : ''}><span>Comentar como anônimo</span></label></form></div>` : ''}
     </div>
-    <p class="body">${esc(p.text).replace(/\n/g, '<br>')}</p>
-    ${pollHtml(p)}
-    ${p.place || p.salary ? `<div class="meta">${p.place ? `<span>${ic('briefcase', 14)} ${esc(p.place)}</span>` : ''}${p.salary ? `<span>Salário: ${esc(p.salary)}</span>` : ''}</div>` : ''}
-    <div class="counts muted small"><span>${p.likes} ${p.likes === 1 ? 'curtida' : 'curtidas'}</span><span>${p.comments.length} ${p.comments.length === 1 ? 'comentário' : 'comentários'}</span></div>
-    <div class="actions">
-      <button class="act ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}">${ic('thumb', 20)}<span>Curtir</span></button>
-      <button class="act" data-action="toggle-comments" data-id="${p.id}">${ic('msg', 20)}<span>Comentar</span></button>
-      <button class="act" data-action="share" data-id="${p.id}">${ic('share', 20)}<span>Compartilhar</span></button>
-      ${p.mine ? `<button class="act mini" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button>` : `<button class="act mini" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 18)}</button>`}
-    </div>
-    ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm">${avatar(c.author)}<div class="bubble"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div></div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
-      <form data-form="comment" data-id="${p.id}"><div class="row gap8"><input name="t" maxlength="300" placeholder="Escreva um comentário" required autocomplete="off"><button class="btn small" type="submit">Enviar</button></div>
-        <label class="check mini"><input type="checkbox" name="anon" ${ui.user.anon ? 'checked' : ''}><span>Comentar como anônimo</span></label></form></div>` : ''}
   </article>`;
 }
 
 function composer() {
-  return `<div class="card composer"><div class="row gap8">
-    ${ui.user.anon ? `<div class="avatar">${ic('user', 18)}</div>` : `<div class="avatar ini">${esc(initials(ui.user.name))}</div>`}
+  const api = Store.mode === 'api';
+  return `<div class="composer"><div class="row gap8">
+    ${avatar(ui.user.name, ui.user.avatar, ui.user.avatar ? '' : '')}
     <button class="fake" data-action="new-post">Compartilhe algo…</button>
-    ${Store.mode === 'api' ? `<button class="ghost" data-action="new-poll" aria-label="Criar enquete">${ic('poll', 24)}</button>` : ''}
+    ${api ? `<button class="ghost" data-action="new-photo" aria-label="Postar foto">${ic('camera', 24)}</button><button class="ghost" data-action="new-poll" aria-label="Criar enquete">${ic('poll', 24)}</button>` : ''}
   </div></div>`;
 }
 
@@ -120,6 +125,7 @@ const TERMS = `<ul class="rules">
   <li><b>Documentos:</b> se mostrar contracheque ou comprovante, cubra dados que não sejam seus.</li>
   <li><b>Seu número do CRTR, e-mail e senha</b> ficam em sigilo e não aparecem para ninguém. Em posts anônimos, nem o seu nome aparece para os colegas.</li>
   <li><b>Anonimato entre os membros:</b> o sistema guarda internamente quem escreveu, só para conter abusos e permitir que você apague o que postou. Isso não é mostrado a ninguém na rede.</li>
+  <li><b>Fotos e prints:</b> nada de imagens de pacientes, exames ou documentos de terceiros. Cubra nomes, CPF e dados pessoais antes de enviar.</li>
   <li>Posts denunciados por várias pessoas são ocultados.</li>
   <li>Você pode apagar sua conta e seus dados quando quiser, no Perfil.</li>
   <li>O UniRad é um espaço de união da categoria e não substitui orientação de advogado ou do CRTR.</li></ul>`;
@@ -214,14 +220,31 @@ function screenSignup() {
   </main>`;
 }
 
+const SHORTCUTS = [['tudo', 'users', 'Tudo'], ['vagas', 'briefcase', 'Vagas'], ['cursos', 'book', 'Cursos'], ['enquete', 'poll', 'Enquetes'], ['atrasos', 'alert', 'Atrasos']];
+function shortcuts() {
+  return `<div class="stories">${SHORTCUTS.filter(([k]) => k !== 'enquete' || Store.mode === 'api').map(([k, i, l]) => {
+    const on = k === 'atrasos' ? false : ui.cat === k;
+    return `<button class="story ${on ? 'on' : ''}" data-action="${k === 'atrasos' ? 'tab' : 'cat'}" ${k === 'atrasos' ? 'data-t="atrasos"' : `data-c="${k}"`}><span class="ring"><span class="in">${ic(i, 22)}</span></span><span class="lbl">${l}</span></button>`;
+  }).join('')}</div>`;
+}
+
 function screenHome() {
-  if (!ui.stats || !ui.posts) return `<main class="pad">${viewSwitch()}${loadingBox}</main>`;
+  return `<main class="feed">
+    ${shortcuts()}
+    ${viewSwitch()}
+    ${composer()}
+    ${!ui.posts ? loadingBox : ui.posts.map(postCard).join('') || '<p class="muted center pad8">Nada por aqui ainda. Seja o primeiro a publicar.</p>'}
+    ${ui.more ? '<button class="btn out" data-action="load-more">Ver mais publicações</button>' : ''}
+  </main>`;
+}
+
+function screenDelays() {
+  if (!ui.stats) return `<main class="pad">${viewSwitch()}${loadingBox}</main>`;
   const { members, national, delays } = ui.stats;
   const MARCOS = [100, 500, 1000, 5000, 10000, 50000];
   const meta = MARCOS.find((m) => national < m) || MARCOS[MARCOS.length - 1];
   const showBar = national >= 50;
   const pct = Math.min(100, Math.round((national / meta) * 100));
-  const recent = ui.posts.slice(0, 2);
   return `<main class="pad">
     ${viewSwitch()}
     <section class="hero">
@@ -238,19 +261,6 @@ function screenHome() {
     ${delays.top.length ? `<div class="card"><div class="small muted">Locais mais citados</div>${delays.top.map((t) => `<div class="row between li"><span>${esc(t.hospital)}</span><b>${t.n} relatos</b></div>`).join('')}</div>`
       : `<p class="muted small">Locais aparecem aqui quando houver ao menos ${CONFIG.hideHospitalBelow} relatos sobre o mesmo, para proteger quem relata.</p>`}
     <button class="btn big" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>
-    <h3 class="sec">Na comunidade</h3>
-    ${composer()}
-    ${recent.map(postCard).join('') || '<p class="muted">Ainda não há publicações aqui. Seja o primeiro.</p>'}
-  </main>`;
-}
-
-function screenFeed() {
-  return `<main class="pad">
-    ${viewSwitch()}
-    <div class="chips">${['tudo', 'geral', 'vagas', 'cursos', 'enquete'].filter((c) => c !== 'enquete' || Store.mode === 'api').map((c) => `<button class="chip btnchip ${ui.cat === c ? 'on' : ''}" data-action="cat" data-c="${c}">${c === 'tudo' ? 'Tudo' : CATS[c]}</button>`).join('')}</div>
-    ${composer()}
-    ${!ui.posts ? loadingBox : ui.posts.map(postCard).join('') || '<p class="muted center pad8">Nada por aqui ainda. Seja o primeiro a publicar.</p>'}
-    ${ui.more ? '<button class="btn out" data-action="load-more">Ver mais publicações</button>' : ''}
   </main>`;
 }
 
@@ -270,9 +280,10 @@ function screenRights() {
 function screenProfile() {
   const u = ui.user;
   return `<main class="pad"><h2>Perfil</h2>
-    <div class="card"><div class="row gap8"><div class="avatar ini big">${esc(initials(u.name))}</div>
+    <div class="card"><div class="row gap8">${avatar(u.name, u.avatar, 'big')}
       <div><div class="name">${esc(u.name)}</div><div class="muted small">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div></div></div>
       ${u.bio ? `<p class="body">${esc(u.bio)}</p>` : ''}
+      ${Store.mode === 'api' ? `<input type="file" id="avatarIn" accept="image/*" hidden><div class="row gap8 avbtns"><button class="btn out small" data-action="change-avatar">${ic('camera', 16)} ${u.avatar ? 'Trocar foto' : 'Adicionar foto'}</button>${u.avatar ? '<button class="btn out small" data-action="remove-avatar">Remover</button>' : ''}</div>` : ''}
       <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Começar os posts como anônimo <span class="muted small">(você ainda escolhe em cada post)</span></span></label>
     </div>
     <form class="card" data-form="profile" novalidate>
@@ -301,7 +312,7 @@ function screenProfile() {
 function modalUser() {
   const u = ui.viewUser;
   const blk = (t, v) => (v ? `<div class="ublk"><b>${t}</b><p>${esc(v).replace(/\n/g, '<br>')}</p></div>` : '');
-  return sheet(u.name, `<div class="muted small" style="margin:-6px 0 10px">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>
+  return sheet(u.name, `${u.avatar ? `<img class="avatar big" style="margin-bottom:8px" src="${imgUrl(u.avatar)}" alt="">` : ''}<div class="muted small" style="margin:-6px 0 10px">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>
     ${blk('Apresentação', u.bio)}${blk('Capacitações', u.trainings)}${blk('Experiências', u.experience)}
     ${u.bio || u.trainings || u.experience ? '' : '<p class="muted">Esse profissional ainda não preencheu o perfil.</p>'}`);
 }
@@ -333,10 +344,13 @@ function modalPost() {
     <div id="pollExtra" ${c === 'enquete' ? '' : 'hidden'}>
       ${[1, 2, 3, 4].map((n) => `<label>Opção ${n}${n < 3 ? ' <i class="req">*</i>' : ' <span class="muted small">(opcional)</span>'}<input name="poll${n}" maxlength="40" placeholder="Resposta ${n}"></label>`).join('')}
     </div>
+    ${Store.mode === 'api' ? `<div class="photobox"><input type="file" id="photoIn" accept="image/*" hidden>
+      <button type="button" class="photobtn" data-action="pick-photo" id="photoBtn">${ic('camera', 20)} Adicionar foto ou print</button>
+      <div id="photoPrev" class="photoprev" hidden><img id="photoImg" alt="Prévia da foto"><button type="button" class="prevx" data-action="rm-photo" aria-label="Remover foto">${ic('x', 18)}</button></div></div>` : ''}
     <label>Onde aparece<select name="scope"><option value="regiao">Só na minha região</option><option value="brasil">Brasil todo</option></select></label>
     <label class="anonbox"><input type="checkbox" name="anon" id="anonChk" ${ui.user.anon ? 'checked' : ''}>
       <span class="anontxt"><b>Publicar como anônimo</b><span class="muted small" id="anonHint"></span></span></label>
-    <p class="muted small">Não publique dados de pacientes, exames ou imagens.</p>
+    <p class="muted small">Não publique dados de pacientes ou exames. Em prints, cubra nomes, CPF e dados pessoais antes de enviar.</p>
     <div class="error" id="formError" role="alert"></div>
     <button class="btn big" type="submit">Publicar</button></form>`);
 }
@@ -358,13 +372,12 @@ function modalDeleteAccount() {
 
 /* ---------- render ---------- */
 function nav() {
-  const t = (k, i, l) => `<button class="${ui.tab === k ? 'on' : ''}" data-action="tab" data-t="${k}" aria-label="${l}">${ic(i)}<span>${l}</span></button>`;
-  return `<nav class="nav">${t('inicio', 'home', 'Início')}${t('comunidade', 'users', 'Comunidade')}<button class="navplus" data-action="new-post" aria-label="Nova publicação">${ic('plus', 26)}</button>${t('direitos', 'shield', 'Direitos')}${t('perfil', 'user', 'Perfil')}</nav>`;
+  const t = (k, i, l) => `<button class="${ui.tab === k ? 'on' : ''}" data-action="tab" data-t="${k}" aria-label="${l}">${ic(i, 26)}<span>${l}</span></button>`;
+  return `<nav class="nav">${t('inicio', 'home', 'Início')}${t('atrasos', 'alert', 'Atrasos')}<button class="navplus" data-action="new-post" aria-label="Nova publicação">${ic('plus', 26)}</button>${t('direitos', 'shield', 'Direitos')}${t('perfil', 'user', 'Perfil')}</nav>`;
 }
 function header() {
-  return `<header class="top"><div class="row gap8">${logo(34)}<div><b>UniRad</b><div class="small dim">${CONFIG.tagline}</div></div></div></header>`;
+  return `<header class="top"><div class="row gap8">${logo(30)}<b class="brand">UniRad</b></div><button class="ghost" data-action="invite" aria-label="Convidar colegas">${ic('share', 22)}</button></header>`;
 }
-
 /* ---- botão voltar do celular: volta uma tela dentro do app ---- */
 const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignorado */ } };
 const popSilently = () => { ui.skipPop = 1; history.back(); };
@@ -392,8 +405,8 @@ function render() {
     bindSignup();
     return;
   }
-  const body = { inicio: screenHome, comunidade: screenFeed, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : '';
+  const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -406,13 +419,13 @@ async function refresh({ quiet = false } = {}) {
   const scope = scopeOf(ui.view);
   try {
     if (ui.tab === 'inicio') {
-      const [stats, posts] = await Promise.all([Store.stats(scope), Store.posts({ scope, cat: 'tudo' })]);
-      if (seq !== ui.seq) return;
-      ui.stats = stats; ui.posts = posts.posts; ui.more = posts.more;
-    } else if (ui.tab === 'comunidade') {
       const posts = await Store.posts({ scope, cat: ui.cat });
       if (seq !== ui.seq) return;
       ui.posts = posts.posts; ui.more = posts.more;
+    } else if (ui.tab === 'atrasos') {
+      const stats = await Store.stats(scope);
+      if (seq !== ui.seq) return;
+      ui.stats = stats;
     } else { return render(); }
   } catch (e) {
     if (seq !== ui.seq) return;
@@ -440,7 +453,41 @@ function bindSignup() {
     c.addEventListener('input', sync); r.addEventListener('change', sync); sync();
   }
 }
+/* fotos: reduz e re-codifica no celular (isso remove dados EXIF) */
+async function processImage(file, max, q) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); }); }
+  const w0 = bmp.width || bmp.naturalWidth, h0 = bmp.height || bmp.naturalHeight;
+  let scale = Math.min(1, max / Math.max(w0, h0));
+  for (let round = 0; round < 3; round++) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w0 * scale)); c.height = Math.max(1, Math.round(h0 * scale));
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(bmp, 0, 0, c.width, c.height);
+    for (let qq = q; qq >= 0.5; qq -= 0.1) {
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', qq));
+      if (blob && blob.size <= 1400000) return blob;
+    }
+    scale *= 0.75;
+  }
+  throw new Error('Não consegui reduzir essa foto. Tente outra.');
+}
+function showPhotoPrev() {
+  const img = document.getElementById('photoImg');
+  if (!img || !ui.photoBlob) return;
+  img.src = URL.createObjectURL(ui.photoBlob);
+  document.getElementById('photoPrev').hidden = false; document.getElementById('photoBtn').hidden = true;
+}
 function bindModal() {
+  const pin = document.getElementById('photoIn');
+  if (pin) {
+    pin.addEventListener('change', async () => {
+      const f = pin.files && pin.files[0]; if (!f) return;
+      try { ui.photoBlob = await processImage(f, 1600, 0.85); showPhotoPrev(); } catch (e) { toast(e.message); }
+      pin.value = '';
+    });
+    showPhotoPrev();
+  }
   const ac = document.getElementById('anonChk');
   if (ac) {
     const hint = () => { document.getElementById('anonHint').textContent = ac.checked ? 'Aparece como "Profissional anônimo". Os colegas não saberão que foi você.' : `Aparece com seu nome: ${ui.user.name}`; };
@@ -502,7 +549,7 @@ document.addEventListener('click', async (ev) => {
     }
     if (a === 'load-more') {
       const last = ui.posts[ui.posts.length - 1];
-      const r = await Store.posts({ scope: scopeOf(ui.view), cat: ui.tab === 'inicio' ? 'tudo' : ui.cat, before: last && last.t });
+      const r = await Store.posts({ scope: scopeOf(ui.view), cat: ui.cat, before: last && last.t });
       ui.posts = ui.posts.concat(r.posts); ui.more = r.more; return render();
     }
     if (a === 'go-login') { ui.screen = 'login'; pushH(); return render(); }
@@ -516,8 +563,14 @@ document.addEventListener('click', async (ev) => {
     if (a === 'view') { ui.view = el.dataset.v; return refresh(); }
     if (a === 'cat') { ui.cat = el.dataset.c; return refresh({ quiet: true }); }
     if (a === 'new-delay') return openModal('delay');
-    if (a === 'new-post') { ui.postCat = 'geral'; return openModal('post'); }
-    if (a === 'new-poll') { ui.postCat = 'enquete'; return openModal('post'); }
+    if (a === 'new-post') { ui.postCat = 'geral'; ui.photoBlob = null; return openModal('post'); }
+    if (a === 'new-poll') { ui.postCat = 'enquete'; ui.photoBlob = null; return openModal('post'); }
+    if (a === 'new-photo') { ui.postCat = 'geral'; ui.photoBlob = null; openModal('post'); const pi = document.getElementById('photoIn'); if (pi) pi.click(); return; }
+    if (a === 'pick-photo') { document.getElementById('photoIn').click(); return; }
+    if (a === 'rm-photo') { ui.photoBlob = null; document.getElementById('photoPrev').hidden = true; document.getElementById('photoBtn').hidden = false; return; }
+    if (a === 'zoom') { ui.zoomSrc = el.dataset.src; return openModal('zoom'); }
+    if (a === 'change-avatar') { document.getElementById('avatarIn').click(); return; }
+    if (a === 'remove-avatar') { await Store.saveProfile({ avatar: '' }); ui.user.avatar = ''; return render(); }
     if (a === 'ask-delete') return openModal('delete');
     if (a === 'like') { await Store.toggleLike(el.dataset.id); return refresh({ quiet: true }); }
     if (a === 'toggle-comments') { ui.open[el.dataset.id] = !ui.open[el.dataset.id]; return render(); }
@@ -534,6 +587,14 @@ function resetSession() {
 document.addEventListener('change', async (ev) => {
   const el = ev.target;
   if (el.dataset.action === 'view-select' && el.value) { ui.view = Number(el.value); refresh(); }
+  if (el.id === 'avatarIn' && el.files && el.files[0]) {
+    try {
+      const blob = await processImage(el.files[0], 512, 0.85);
+      const key = await Store.upload(blob);
+      await Store.saveProfile({ avatar: key }); ui.user.avatar = key; toast('Foto atualizada.'); render();
+    } catch (e) { toast(e.message); }
+    el.value = ''; return;
+  }
   if (el.dataset.action === 'toggle-anon') {
     try { await Store.setAnon(el.checked); ui.user.anon = el.checked; } catch (e) { el.checked = !el.checked; toast(e.message); }
   }
@@ -598,10 +659,12 @@ document.addEventListener('submit', async (ev) => {
       if (cat === 'enquete' && poll.length < 2) return err('A enquete precisa de pelo menos 2 opções.');
       busy(f, true);
       try {
-        await Store.addPost({ cat, poll, scope: String(d.get('scope')), anon: !!d.get('anon'), text, place: cat === 'vagas' ? String(d.get('place') || '').trim() : '', salary: cat === 'vagas' ? String(d.get('salary') || '').trim() : '' });
+        const image = ui.photoBlob ? await Store.upload(ui.photoBlob) : null;
+        ui.photoBlob = null;
+        await Store.addPost({ cat, poll, image, scope: String(d.get('scope')), anon: !!d.get('anon'), text, place: cat === 'vagas' ? String(d.get('place') || '').trim() : '', salary: cat === 'vagas' ? String(d.get('salary') || '').trim() : '' });
       } finally { busy(f, false); }
-      if (ui.modal) { ui.modal = null; if (ui.tab !== 'inicio') popSilently(); } else if (ui.tab === 'inicio') pushH();
-      ui.tab = 'comunidade'; ui.cat = 'tudo';
+      if (ui.modal) { ui.modal = null; popSilently(); }
+      ui.cat = 'tudo'; ui.view = ui.view === 'brasil' || /^\d+$/.test(String(ui.view)) ? ui.view : 'mine';
       return refresh();
     }
     if (kind === 'profile') {

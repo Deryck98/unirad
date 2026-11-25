@@ -6,6 +6,8 @@ const ROLES = ['Técnico em Radiologia', 'Tecnólogo em Radiologia'];
 const DELAY_TYPES = ['Salário atrasado', 'Pagamento abaixo do piso', 'Hora extra / plantão sem pagar', 'Adicional não pago', 'Outro'];
 const CATS = ['geral', 'vagas', 'cursos', 'enquete'];
 const PAGE = 20;
+const MAX_IMG = 1500000;
+const KEY_RE = /^[0-9a-f-]{36}\.(jpg|png|webp)$/;
 const REGION_MAX = 19;
 const HIDE_AFTER_REPORTS = 3;
 const MIN_FOR_HOSPITAL = 3;
@@ -57,11 +59,11 @@ async function currentUser(req, env) {
   const token = getCookie(req, 'unirad_session');
   if (!token) return null;
   const row = await env.DB.prepare(
-    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
+    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.avatar FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
   ).bind(await sha256(token), Date.now()).first();
   return row || null;
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '' });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '' });
 
 async function readJson(req) {
   const ct = req.headers.get('content-type') || '';
@@ -113,7 +115,7 @@ async function signup(req, env) {
   const user = await currentUserById(env, id);
   return json({ user: publicUser(user) }, 201, { 'set-cookie': sessionCookie(token, SESSION_DAYS * 86400) });
 }
-const currentUserById = (env, id) => env.DB.prepare('SELECT id, name, role, region, anon_default, bio, trainings, experience FROM users WHERE id = ?').bind(id).first();
+const currentUserById = (env, id) => env.DB.prepare('SELECT id, name, role, region, anon_default, bio, trainings, experience, avatar FROM users WHERE id = ?').bind(id).first();
 
 async function login(req, env) {
   const b = await readJson(req);
@@ -139,7 +141,10 @@ async function deleteAccount(req, env, user) {
   const row = await env.DB.prepare('SELECT pass_hash, pass_salt FROM users WHERE id = ?').bind(user.id).first();
   if (!row || !timingSafeEqual(await hashPassword(String(b.password ?? ''), row.pass_salt), row.pass_hash)) throw new HttpError(401, 'Senha incorreta.');
   const id = user.id;
+  const ups = await env.DB.prepare('SELECT key FROM uploads WHERE user_id = ?').bind(id).all();
+  for (let i = 0; i < ups.results.length; i += 500) await env.PHOTOS.delete(ups.results.slice(i, i + 500).map((r) => r.key));
   await env.DB.batch([
+    env.DB.prepare('DELETE FROM uploads WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM comments WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM likes WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM reports WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
@@ -185,7 +190,7 @@ async function listPosts(url, env, user) {
   let beforeSql = '';
   if (before) { beforeSql = ' AND p.created_at < ?'; args.push(before); }
   const rows = await env.DB.prepare(
-    `SELECT p.id, p.cat, p.scope, p.region, p.anon, p.author_name, p.text, p.place, p.salary, p.poll, p.created_at, p.user_id,
+    `SELECT p.id, p.cat, p.scope, p.region, p.anon, p.author_name, p.text, p.place, p.salary, p.poll, p.image, p.created_at, p.user_id, (SELECT avatar FROM users u WHERE u.id = p.user_id) AS avatar,
       (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes,
       EXISTS (SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked
      FROM posts p
@@ -218,7 +223,7 @@ async function listPosts(url, env, user) {
   return json({
     posts: posts.map((p) => ({
       id: p.id, cat: p.cat, scope: p.scope, region: p.region,
-      author: p.anon ? 'Profissional anônimo' : p.author_name, authorId: p.anon ? null : p.user_id,
+      author: p.anon ? 'Profissional anônimo' : p.author_name, authorId: p.anon ? null : p.user_id, authorAvatar: p.anon ? null : (p.avatar || null), image: p.image || null,
       text: p.text, place: p.place || '', salary: p.salary || '', t: p.created_at,
       likes: p.likes, liked: !!p.liked, mine: p.user_id === user.id, comments: byId.get(p.id) || [], poll: p.pollOut || null
     })),
@@ -229,6 +234,46 @@ async function listPosts(url, env, user) {
 async function rateLimit(env, table, userId, max, windowMs) {
   const n = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ? AND created_at > ?`).bind(userId, Date.now() - windowMs).first()).n;
   if (n >= max) throw new HttpError(429, 'Muitas ações em pouco tempo. Tente de novo mais tarde.');
+}
+
+function sniff(b) {
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return ['image/jpeg', 'jpg'];
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return ['image/png', 'png'];
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return ['image/webp', 'webp'];
+  return null;
+}
+
+async function upload(req, env, user) {
+  const len = Number(req.headers.get('content-length') || 0);
+  if (len > MAX_IMG) throw new HttpError(413, 'Foto muito grande. Tente outra.');
+  const buf = await req.arrayBuffer();
+  if (!buf.byteLength || buf.byteLength > MAX_IMG) throw new HttpError(413, 'Foto muito grande. Tente outra.');
+  const kind = sniff(new Uint8Array(buf.slice(0, 16)));
+  if (!kind) throw bad('Envie uma imagem JPG, PNG ou WEBP.');
+  await rateLimit(env, 'uploads', user.id, 30, DAY);
+  const key = `${crypto.randomUUID()}.${kind[1]}`;
+  await env.PHOTOS.put(key, buf, { httpMetadata: { contentType: kind[0] } });
+  await env.DB.prepare('INSERT INTO uploads (key, user_id, created_at) VALUES (?, ?, ?)').bind(key, user.id, Date.now()).run();
+  return json({ key }, 201);
+}
+
+async function serveImage(env, key) {
+  if (!KEY_RE.test(key)) throw new HttpError(404, 'Não encontrado.');
+  const obj = await env.PHOTOS.get(key);
+  if (!obj) throw new HttpError(404, 'Não encontrado.');
+  return new Response(obj.body, { headers: { 'content-type': obj.httpMetadata?.contentType || 'application/octet-stream', 'cache-control': 'private, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+}
+
+async function ownUpload(env, user, key) {
+  if (!KEY_RE.test(key)) throw bad('Foto inválida.');
+  const r = await env.DB.prepare('SELECT 1 AS x FROM uploads WHERE key = ? AND user_id = ?').bind(key, user.id).first();
+  if (!r) throw bad('Foto inválida.');
+}
+
+async function dropImage(env, key) {
+  if (!key) return;
+  await env.PHOTOS.delete(key);
+  await env.DB.prepare('DELETE FROM uploads WHERE key = ?').bind(key).run();
 }
 
 async function createPost(req, env, user) {
@@ -244,12 +289,14 @@ async function createPost(req, env, user) {
     if (opts.length < 2 || opts.length > 4) throw bad('A enquete precisa de 2 a 4 opções.');
     poll = JSON.stringify(opts);
   }
+  let image = null;
+  if (b.image) { image = str(b.image, 60); await ownUpload(env, user, image); }
   await rateLimit(env, 'posts', user.id, 20, DAY);
   const anon = b.anon === false ? 0 : 1;
   const id = crypto.randomUUID();
-  await env.DB.prepare('INSERT INTO posts (id, user_id, cat, scope, region, anon, author_name, text, place, salary, created_at, poll) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  await env.DB.prepare('INSERT INTO posts (id, user_id, cat, scope, region, anon, author_name, text, place, salary, created_at, poll, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(id, user.id, cat, scope, user.region, anon, anon ? null : user.name, text,
-      cat === 'vagas' ? str(b.place, 80) : null, cat === 'vagas' ? str(b.salary, 30) : null, Date.now(), poll).run();
+      cat === 'vagas' ? str(b.place, 80) : null, cat === 'vagas' ? str(b.salary, 30) : null, Date.now(), poll, image).run();
   return json({ id }, 201);
 }
 
@@ -293,8 +340,9 @@ async function reportPost(env, user, id) {
 }
 
 async function deletePost(env, user, id) {
-  const own = await env.DB.prepare('SELECT 1 AS x FROM posts WHERE id = ? AND user_id = ?').bind(id, user.id).first();
+  const own = await env.DB.prepare('SELECT image FROM posts WHERE id = ? AND user_id = ?').bind(id, user.id).first();
   if (!own) throw new HttpError(404, 'Publicação não encontrada.');
+  await dropImage(env, own.image);
   await env.DB.batch([
     env.DB.prepare('DELETE FROM comments WHERE post_id = ?').bind(id),
     env.DB.prepare('DELETE FROM likes WHERE post_id = ?').bind(id),
@@ -351,6 +399,13 @@ export default {
       if (p === '/api/me' && m === 'PATCH') {
         const b = await readJson(req);
         if (typeof b.anon === 'boolean') await env.DB.prepare('UPDATE users SET anon_default = ? WHERE id = ?').bind(b.anon ? 1 : 0, user.id).run();
+        if ('avatar' in b) {
+          const old = (await env.DB.prepare('SELECT avatar FROM users WHERE id = ?').bind(user.id).first())?.avatar;
+          let nk = '';
+          if (b.avatar) { nk = str(b.avatar, 60); await ownUpload(env, user, nk); }
+          await env.DB.prepare('UPDATE users SET avatar = ? WHERE id = ?').bind(nk || null, user.id).run();
+          if (old && old !== nk) await dropImage(env, old);
+        }
         if ('bio' in b || 'trainings' in b || 'experience' in b) {
           await env.DB.prepare('UPDATE users SET bio = ?, trainings = ?, experience = ? WHERE id = ?')
             .bind(str(b.bio, 160), str(b.trainings, 500), str(b.experience, 500), user.id).run();
@@ -362,12 +417,15 @@ export default {
       if (p === '/api/posts' && m === 'GET') return await listPosts(url, env, user);
       if (p === '/api/posts' && m === 'POST') return await createPost(req, env, user);
       if (p === '/api/delays' && m === 'POST') return await createDelay(req, env, user);
+      if (p === '/api/upload' && m === 'POST') return await upload(req, env, user);
+      const im = p.match(/^\/api\/img\/([0-9a-f-]{36}\.[a-z]{3,4})$/);
+      if (im && m === 'GET') return await serveImage(env, im[1]);
 
       const um = p.match(/^\/api\/users\/([0-9a-f-]{36})$/);
       if (um && m === 'GET') {
-        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience FROM users WHERE id = ?').bind(um[1]).first();
+        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, avatar FROM users WHERE id = ?').bind(um[1]).first();
         if (!u) throw new HttpError(404, 'Perfil não encontrado.');
-        return json({ user: { name: u.name, role: u.role, region: u.region, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '' } });
+        return json({ user: { name: u.name, role: u.role, region: u.region, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '' } });
       }
 
       const pm = p.match(/^\/api\/posts\/([0-9a-f-]{36})(?:\/(like|comments|report|vote))?$/);
