@@ -23,7 +23,7 @@ async function call(method, path, body) {
 
 const api = {
   mode: 'api',
-  async init() { return (await call('GET', '/me')).user; },
+  async init() { const r = preMe ? await preMe : await call('GET', '/me'); preMe = null; return r.user; },
   async signup(d) { return (await call('POST', '/signup', d)).user; },
   async login(email, password) { return (await call('POST', '/login', { email, password })).user; },
   async logout() { await call('POST', '/logout'); },
@@ -96,10 +96,14 @@ const demo = {
   async addDelay(d) { (d.items || []).forEach((it) => L.addDelay({ region: L.user.region, hospital: d.hospital, type: d.type, month: it.month, days: it.days, anon: true })); }
 };
 
+let preMe = null;
 export async function connect() {
+  /* pede /me e /health ao mesmo tempo (uma ida só ao servidor) */
+  preMe = fetch('/api/me', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : { user: null })).catch(() => ({ user: null }));
   try {
     const r = await fetch('/api/health', { cache: 'no-store' });
     if (r.ok && (await r.json()).ok) return api;
   } catch { /* sem servidor */ }
+  preMe = null;
   return demo;
 }

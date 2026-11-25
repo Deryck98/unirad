@@ -337,3 +337,63 @@ body.noscroll{overflow:hidden}
 .csheet{height:88%}
 .csheet .grab i{background:#9aa7bf}
 .ctitle{border-bottom:1px solid #cfd7e6}
+
+/* ===== rodada de melhorias ===== */
+html{overscroll-behavior-y:contain}
+.top{position:sticky;top:0;transition:transform .2s}
+body.hh .top{transform:translateY(-100%)}
+.vtabs{transition:top .2s}
+body.hh .vtabs{top:0}
+.skel{padding:4px 14px}
+.sk{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.sk i{width:36px;height:36px;border-radius:50%;background:#e9eef6;flex:none}
+.sk div{flex:1}
+.sk b{display:block;height:11px;border-radius:6px;background:#e9eef6;margin:0 0 10px;width:45%}
+.sk b.w90{width:92%}.sk b.w70{width:70%}
+.sk i,.sk b{animation:shim 1.2s ease-in-out infinite}
+@keyframes shim{0%,100%{opacity:1}50%{opacity:.45}}
+.ptr{position:fixed;top:calc(56px + env(safe-area-inset-top));left:50%;transform:translate(-50%,-50px);opacity:0;z-index:20;width:36px;height:36px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;pointer-events:none}
+.ptr i{width:18px;height:18px;border-radius:50%;border:3px solid #cfd7e6;border-top-color:var(--blue)}
+.ptr.spin i{animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.list{background:#fff;border:1px solid var(--line);border-radius:14px;margin:10px 0;overflow:hidden}
+.lrow{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:52px;padding:8px 14px;border-bottom:1px solid var(--line);font-size:16px;text-align:left;color:var(--text);font-weight:400;text-decoration:none}
+.lrow:last-child{border-bottom:0}
+.lrow svg{color:#8a94a8;flex:none}
+.lrow.danger{color:var(--red)}
+.lrow.static{align-items:flex-start;padding:12px 14px}
+.redtxt{color:var(--red);font-weight:600;font-size:14px;white-space:nowrap}
+.acc2 summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:8px 14px;font-weight:600;font-size:16px;cursor:pointer;list-style:none}
+.acc2 summary::-webkit-details-marker{display:none}
+.acc2{border-bottom:1px solid var(--line)}.acc2:last-child{border-bottom:0}
+.acc2 summary svg{color:#8a94a8;transition:transform .2s;flex:none}
+.acc2[open] summary svg{transform:rotate(90deg)}
+.acc2 p{margin:0;padding:0 14px 14px;color:var(--muted);line-height:1.5}
+.prof{padding:0 14px 90px}
+.phero{text-align:center;padding:18px 0 6px}
+.avwrap{position:relative;display:inline-block}
+.avatar.xl{width:92px;height:92px;font-size:30px}
+.avedit{position:absolute;right:-4px;bottom:-2px;width:34px;height:34px;border-radius:50%;background:var(--navy);color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center}
+.pname{margin:10px 0 2px;font-size:20px}
+.pbio{margin:8px 0 0;line-height:1.4}
+.pstats{display:flex;justify-content:center;gap:34px;margin:14px 0 4px}
+.pstats div{display:flex;flex-direction:column;align-items:center}.pstats b{font-size:18px}.pstats span{font-size:13px;color:var(--muted)}
+.prow{display:flex;gap:8px;margin:14px 0 8px}.prow .btn{flex:1;min-height:44px}
+input.sw{appearance:none;-webkit-appearance:none;width:46px!important;height:28px!important;border-radius:14px;background:#c5cddb;position:relative;flex:none;margin:0!important;border:0;transition:background .15s}
+input.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+input.sw:checked{background:var(--blue)}
+input.sw:checked::after{transform:translateX(18px)}
+.anonbox{align-items:center;justify-content:space-between}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px}
+.chip2{min-height:40px;padding:0 16px;border-radius:999px;border:1px solid #c5cddb;background:#fff;font-weight:600;font-size:14px;color:var(--text)}
+.chip2.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.stickybtns{position:sticky;bottom:0;background:#fff;padding:10px 0 4px;margin-top:6px}
+/* alvos de toque de 44px */
+.top .ghost{min-width:44px;min-height:44px}
+.post .more{min-width:44px;min-height:44px;margin:-10px -10px 0 0}
+.linkname{display:inline-block;padding:12px 0;margin:-12px 0}
+.nav .navplus{height:44px;min-height:44px;width:52px}
+.ccol .cmore{min-width:44px;min-height:44px}
+.clike{min-width:44px}
+.composer .ghost{min-width:44px;min-height:44px}
+.avedit::after{content:"";position:absolute;inset:-6px}

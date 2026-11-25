@@ -175,7 +175,10 @@ async function stats(url, env) {
   const top = await env.DB.prepare(
     `SELECT MIN(hospital) AS hospital, COUNT(DISTINCT COALESCE(batch_id, id)) AS n FROM delays WHERE ${dWhere} GROUP BY LOWER(TRIM(hospital)) HAVING COUNT(DISTINCT COALESCE(batch_id, id)) >= ? ORDER BY n DESC LIMIT 5`
   ).bind(...args, MIN_FOR_HOSPITAL).all();
-  return json({ members, national, delays: { total, avgDays: avg ? Math.round(avg) : 0, top: top.results } });
+  const recent = await env.DB.prepare(
+    `SELECT type, MAX(days) AS days, MIN(month) AS from_month, COUNT(*) AS months, MAX(created_at) AS t FROM delays WHERE ${dWhere} GROUP BY COALESCE(batch_id, id) ORDER BY t DESC LIMIT 5`
+  ).bind(...args).all();
+  return json({ members, national, delays: { total, avgDays: avg ? Math.round(avg) : 0, top: top.results, recent: recent.results.map((r) => ({ type: r.type, days: r.days, month: r.from_month, months: r.months, t: r.t })) } });
 }
 
 async function listPosts(url, env, user) {
@@ -407,7 +410,14 @@ export default {
       if (p === '/api/logout' && m === 'POST') return await logout(req, env);
 
       const user = await currentUser(req, env);
-      if (p === '/api/me' && m === 'GET') return user ? json({ user: publicUser(user) }) : json({ user: null });
+      if (p === '/api/me' && m === 'GET') {
+        if (!user) return json({ user: null });
+        const [pc, lc] = await Promise.all([
+          env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE user_id = ?').bind(user.id).first(),
+          env.DB.prepare('SELECT COUNT(*) AS n FROM likes l JOIN posts p ON p.id = l.post_id WHERE p.user_id = ?').bind(user.id).first(),
+        ]);
+        return json({ user: { ...publicUser(user), posts: pc.n, bolts: lc.n } });
+      }
       if (!user) throw new HttpError(401, 'Entre para continuar.');
 
       if (p === '/api/me' && m === 'PATCH') {

@@ -41,6 +41,7 @@ const ICONS = {
   poll: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   up: '<polyline points="18 15 12 9 6 15"/>',
   trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  chev: '<polyline points="9 18 15 12 9 6"/>',
   bolt: '<path d="M13 3v7h6l-8 11v-7H5z"/>',
   dots: '<circle cx="12" cy="5" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="19" r="1.7" fill="currentColor"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
@@ -192,7 +193,7 @@ const TERMS = `<ul class="rules">
   <li>Você pode apagar sua conta e seus dados quando quiser, no Perfil.</li>
   <li>O UniRad é um espaço de união da categoria e não substitui orientação de advogado ou do CRTR.</li></ul>`;
 
-const loadingBox = '<div class="center muted pad8" role="status">Carregando…</div>';
+const loadingBox = '<div class="skel" role="status" aria-label="Carregando">' + [0, 1, 2].map(() => '<div class="sk"><i></i><div><b></b><b class="w90"></b><b class="w70"></b></div></div>').join('') + '</div>';
 
 /* ---------- telas ---------- */
 let installEvt = null;
@@ -283,7 +284,7 @@ function screenSignup() {
   </main>`;
 }
 
-const SHORTCUTS = [['tudo', 'users', 'Tudo'], ['vagas', 'briefcase', 'Vagas'], ['cursos', 'book', 'Cursos'], ['enquete', 'poll', 'Enquetes'], ['atrasos', 'alert', 'Atrasos']];
+const SHORTCUTS = [['tudo', 'users', 'Tudo'], ['vagas', 'briefcase', 'Vagas'], ['cursos', 'book', 'Cursos'], ['enquete', 'poll', 'Enquetes']];
 function shortcuts() {
   return `<div class="stories">${SHORTCUTS.filter(([k]) => k !== 'enquete' || Store.mode === 'api').map(([k, i, l]) => {
     const on = k === 'atrasos' ? false : ui.cat === k;
@@ -301,6 +302,7 @@ function screenHome() {
   </main>`;
 }
 
+const fmtMonth = (m) => { const [y, mo] = String(m || '').split('-'); return MES[Number(mo) - 1] ? `${MES[Number(mo) - 1]}/${y}` : ''; };
 function screenDelays() {
   if (!ui.stats) return `<main class="pad">${viewSwitch()}${loadingBox}</main>`;
   const { members, national, delays } = ui.stats;
@@ -314,16 +316,17 @@ function screenDelays() {
       <div class="small">Profissionais unidos · ${esc(viewName(ui.view))}</div>
       <div class="big-n">${members.toLocaleString('pt-BR')}</div>
       ${showBar ? `<div class="small">Próxima meta do Brasil: ${meta.toLocaleString('pt-BR')} (${national.toLocaleString('pt-BR')} hoje)</div>
-      <div class="bar"><i style="width:${pct}%"></i></div>` : `<div class="small">Cada cadastro fortalece a categoria. <a href="#" data-action="invite" style="color:#fff;font-weight:700">Convide seus colegas</a>.</div>`}
+      <div class="bar"><i style="width:${pct}%"></i></div>` : `<div class="small">Cada cadastro fortalece a categoria. <a href="#" data-action="invite" style="color:#fff;font-weight:700;display:inline-block;padding:8px 0">Convide seus colegas</a>.</div>`}
     </section>
     <h3 class="sec">Mural de atrasos</h3>
     <div class="grid2">
       <div class="stat red"><div class="small">Relatos</div><div class="n">${delays.total}</div></div>
       <div class="stat amber"><div class="small">Atraso médio</div><div class="n">${delays.avgDays ? delays.avgDays + ' dias' : '—'}</div></div>
     </div>
+    <button class="btn big" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>
+    ${delays.recent && delays.recent.length ? `<h3 class="sec">Relatos recentes</h3><div class="list">${delays.recent.map((r) => `<div class="lrow static"><span>${esc(r.type)}${r.days ? ` · ${r.days} dias` : ''}${r.months > 1 ? ` · ${r.months} meses` : ''}<br><span class="muted small">${ago(r.t)}</span></span><b class="redtxt">${esc(fmtMonth(r.month))}</b></div>`).join('')}</div>` : ''}
     ${delays.top.length ? `<div class="card"><div class="small muted">Locais mais citados</div>${delays.top.map((t) => `<div class="row between li"><span>${esc(t.hospital)}</span><b>${t.n} relatos</b></div>`).join('')}</div>`
       : `<p class="muted small">Locais aparecem aqui quando houver ao menos ${CONFIG.hideHospitalBelow} relatos sobre o mesmo, para proteger quem relata.</p>`}
-    <button class="btn big" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>
   </main>`;
 }
 
@@ -336,40 +339,44 @@ const RIGHTS = [
 function screenRights() {
   return `<main class="pad"><h2>Direitos</h2>
     <p class="muted small">Informativo geral, não é aconselhamento jurídico. Confira sempre o texto atual da lei.</p>
-    ${RIGHTS.map(([t, b]) => `<details class="card acc"><summary>${esc(t)}</summary><p>${esc(b)}</p></details>`).join('')}
+    <div class="list">${RIGHTS.map(([t, b]) => `<details class="acc2"><summary><span>${esc(t)}</span>${ic('chev', 18)}</summary><p>${esc(b)}</p></details>`).join('')}</div>
   </main>`;
 }
 
-function screenProfile() {
-  const u = ui.user;
-  return `<main class="pad"><h2>Perfil</h2>
-    <div class="card"><div class="row gap8">${avatar(u.name, u.avatar, 'big')}
-      <div><div class="name">${esc(u.name)}</div><div class="muted small">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div></div></div>
-      ${u.bio ? `<p class="body">${esc(u.bio)}</p>` : ''}
-      ${Store.mode === 'api' ? `<input type="file" id="avatarIn" accept="image/*" hidden><div class="row gap8 avbtns"><button class="btn out small" data-action="change-avatar">${ic('camera', 16)} ${u.avatar ? 'Trocar foto' : 'Adicionar foto'}</button>${u.avatar ? '<button class="btn out small" data-action="remove-avatar">Remover</button>' : ''}</div>` : ''}
-      <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Começar os posts como anônimo <span class="muted small">(você ainda escolhe em cada post)</span></span></label>
-    </div>
-    <form class="card" data-form="profile" novalidate>
-      <b>Sobre você</b>
+function profileForm(u) {
+  return `<form data-form="profile" novalidate>
       <label>Nome que aparece no app <i class="req">*</i><input name="dname" maxlength="40" required placeholder="Ex.: Deryck Bento" value="${esc(u.name)}"></label>
       <p class="muted small" style="margin-top:-4px">Pode ser só o primeiro nome, um apelido ou como preferir. Troca também nas suas publicações antigas (as anônimas continuam anônimas).</p>
-      <p class="muted small">Tudo opcional. Só aparece para os outros membros quando você posta sem anonimato e alguém toca no seu nome. Seu CRTR, e-mail e senha nunca aparecem.</p>
+      <p class="muted small">O resto é opcional. Só aparece para os outros membros quando você posta sem anonimato e alguém toca no seu nome. Seu CRTR, e-mail e senha nunca aparecem.</p>
       <label>Apresentação<input name="bio" maxlength="160" placeholder="Ex.: Técnico em radiologia há 8 anos, em Manaus" value="${esc(u.bio || '')}"></label>
       <label>Capacitações<textarea name="trainings" rows="3" maxlength="500" placeholder="Cursos e treinamentos (tomografia, ressonância, radioproteção…)">${esc(u.trainings || '')}</textarea></label>
       <label>Experiências<textarea name="experience" rows="3" maxlength="500" placeholder="Onde já atuou e em quais áreas">${esc(u.experience || '')}</textarea></label>
       <div class="error" id="formError" role="alert"></div>
-      <button class="btn" type="submit">Salvar perfil</button>
-    </form>
-    <div class="card invite"><b>Convide seus colegas</b>
-      <p class="muted small">Quanto mais gente, mais força. Mande seu convite:</p>
-      <a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(INVITE())}">Convidar pelo WhatsApp</a>
-      <button class="btn out" data-action="invite">${ic('share', 18)} Compartilhar link</button>
-      <button class="btn out" data-action="copy-link">Copiar link</button>
+      <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" type="submit">Salvar</button></div>
+    </form>`;
+}
+function modalEditProfile() { return sheet('Editar perfil', profileForm(ui.user)); }
+function screenProfile() {
+  const u = ui.user, api = Store.mode === 'api';
+  const row = (act, label, cls = '') => `<button class="lrow ${cls}" data-action="${act}"><span>${label}</span>${ic('chev', 18)}</button>`;
+  return `<main class="prof">
+    <section class="phero">
+      <div class="avwrap">${avatar(u.name, u.avatar, 'xl')}${api ? `<input type="file" id="avatarIn" accept="image/*" hidden><button class="avedit" data-action="change-avatar" aria-label="Trocar foto">${ic('camera', 16)}</button>` : ''}</div>
+      <h2 class="pname">${esc(u.name)}</h2>
+      <div class="muted">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>
+      ${u.bio ? `<p class="pbio">${esc(u.bio)}</p>` : ''}
+      ${api && u.posts !== undefined ? `<div class="pstats"><div><b>${u.posts}</b><span>${u.posts === 1 ? 'post' : 'posts'}</span></div><div><b>${u.bolts}</b><span>${u.bolts === 1 ? 'raio' : 'raios'}</span></div></div>` : ''}
+      <div class="prow"><button class="btn out" data-action="edit-profile">Editar perfil</button><button class="btn out" data-action="invite">Convidar</button></div>
+    </section>
+    <div class="list">
+      <label class="lrow"><span>Começar posts como anônimo</span><input type="checkbox" class="sw" data-action="toggle-anon" ${u.anon ? 'checked' : ''}></label>
+      <a class="lrow" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(INVITE())}"><span>Convidar pelo WhatsApp</span>${ic('chev', 18)}</a>
+      ${row('copy-link', 'Copiar link de convite')}
+      ${standalone() ? '' : row('install', 'Instalar app')}
+      ${row('show-terms', 'Regras do UniRad')}
+      ${row('logout', 'Sair')}
+      ${row('ask-delete', 'Apagar minha conta e meus dados', 'danger')}
     </div>
-    ${installBtn()}
-    <button class="btn out" data-action="show-terms">Ver regras do UniRad</button>
-    <button class="btn out" data-action="logout">Sair</button>
-    <button class="btn out danger" data-action="ask-delete">Apagar minha conta e meus dados</button>
     ${Store.mode === 'demo' ? '<p class="muted small center">Modo demonstração: os dados ficam só neste aparelho.</p>' : ''}
   </main>`;
 }
@@ -400,7 +407,8 @@ function modalDelay() {
 function modalPost() {
   const c = ui.postCat;
   return sheet(c === 'enquete' ? 'Nova enquete' : 'Nova publicação', `<form data-form="post" novalidate>
-    <label>Tipo<select name="cat" id="catSel"><option value="geral" ${c === 'geral' ? 'selected' : ''}>Geral</option><option value="vagas" ${c === 'vagas' ? 'selected' : ''}>Vaga</option><option value="cursos" ${c === 'cursos' ? 'selected' : ''}>Curso / capacitação</option>${Store.mode === 'api' ? `<option value="enquete" ${c === 'enquete' ? 'selected' : ''}>Enquete</option>` : ''}</select></label>
+    <div class="chips" role="group" aria-label="Tipo">${[['geral', 'Geral'], ['vagas', 'Vaga'], ['cursos', 'Curso'], ['enquete', 'Enquete']].map(([v, l]) => `<button type="button" class="chip2 ${c === v ? 'on' : ''}" data-action="chip" data-for="catSel" data-v="${v}">${l}</button>`).join('')}</div>
+    <select name="cat" id="catSel" hidden><option value="geral" ${c === 'geral' ? 'selected' : ''}>Geral</option><option value="vagas" ${c === 'vagas' ? 'selected' : ''}>Vaga</option><option value="cursos" ${c === 'cursos' ? 'selected' : ''}>Curso / capacitação</option>${Store.mode === 'api' ? `<option value="enquete" ${c === 'enquete' ? 'selected' : ''}>Enquete</option>` : ''}</select>
     <label><span id="textLabel">${c === 'enquete' ? 'Pergunta' : 'Texto'}</span> <i class="req">*</i><textarea name="text" required maxlength="800" rows="4" placeholder="Escreva aqui"></textarea></label>
     <div id="vagaExtra" ${c === 'vagas' ? '' : 'hidden'}>
       <label>Local<input name="place" maxlength="80" placeholder="Hospital ou clínica"></label>
@@ -412,12 +420,12 @@ function modalPost() {
     ${Store.mode === 'api' ? `<div class="photobox"><input type="file" id="photoIn" accept="image/*" hidden>
       <button type="button" class="photobtn" data-action="pick-photo" id="photoBtn">${ic('camera', 20)} Adicionar foto ou print</button>
       <div id="photoPrev" class="photoprev" hidden><img id="photoImg" alt="Prévia da foto"><button type="button" class="prevx" data-action="rm-photo" aria-label="Remover foto">${ic('x', 18)}</button></div></div>` : ''}
-    <label>Onde aparece<select name="scope"><option value="regiao">Só na minha região</option><option value="brasil">Brasil todo</option></select></label>
-    <label class="anonbox"><input type="checkbox" name="anon" id="anonChk" ${ui.user.anon ? 'checked' : ''}>
-      <span class="anontxt"><b>Publicar como anônimo</b><span class="muted small" id="anonHint"></span></span></label>
+    <div class="chips" role="group" aria-label="Onde aparece"><button type="button" class="chip2 on" data-action="chip" data-for="scopeSel" data-v="regiao">Minha região</button><button type="button" class="chip2" data-action="chip" data-for="scopeSel" data-v="brasil">Brasil todo</button></div>
+    <select name="scope" id="scopeSel" hidden><option value="regiao">Só na minha região</option><option value="brasil">Brasil todo</option></select>
+    <label class="anonbox"><span class="anontxt"><b>Publicar como anônimo</b><span class="muted small" id="anonHint"></span></span><input type="checkbox" class="sw" name="anon" id="anonChk" ${ui.user.anon ? 'checked' : ''}></label>
     <p class="muted small">Não publique dados de pacientes ou exames. Em prints, cubra nomes, CPF e dados pessoais antes de enviar.</p>
     <div class="error" id="formError" role="alert"></div>
-    <div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" type="submit">Publicar</button></div></form>`);
+    <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" type="submit">Publicar</button></div></form>`);
 }
 
 function modalInstall() {
@@ -473,7 +481,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -682,6 +690,8 @@ document.addEventListener('click', async (ev) => {
     if (a === 'new-delay') return openModal('delay');
     if (a === 'new-post') { ui.postCat = 'geral'; ui.photoBlob = null; return openModal('post'); }
     if (a === 'new-poll') { ui.postCat = 'enquete'; ui.photoBlob = null; return openModal('post'); }
+    if (a === 'edit-profile') return openModal('editprofile');
+    if (a === 'chip') { const sel = document.getElementById(el.dataset.for); sel.value = el.dataset.v; sel.dispatchEvent(new Event('change')); el.parentElement.querySelectorAll('.chip2').forEach((b) => b.classList.toggle('on', b === el)); return; }
     if (a === 'menu-post') { const p = (ui.posts || []).find((x) => x.id === el.dataset.id); if (p) { ui.menu = { kind: 'post', id: p.id, mine: !!p.mine, text: p.text }; openModal('menu'); } return; }
     if (a === 'menu-comment') { const p = (ui.posts || []).find((x) => x.id === el.dataset.pid); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (c) { ui.menu = { kind: 'comment', id: c.id, mine: true, text: c.text }; openModal('menu'); } return; }
     if (a === 'menu-edit') { const m = ui.menu; ui.editPost = { type: m.kind, id: m.id, text: m.text }; ui.modal = 'edit'; return render(); }
@@ -832,7 +842,7 @@ document.addEventListener('submit', async (ev) => {
       const p = { name: dn, bio: String(d.get('bio') || '').trim(), trainings: String(d.get('trainings') || '').trim(), experience: String(d.get('experience') || '').trim() };
       busy(f, true);
       try { await Store.saveProfile(p); } finally { busy(f, false); }
-      Object.assign(ui.user, p); toast('Perfil salvo.');
+      Object.assign(ui.user, p); toast('Perfil salvo.'); if (ui.modal === 'editprofile') closeModal();
       return refresh({ quiet: true });
     }
     if (kind === 'edit') {
@@ -870,7 +880,9 @@ window.addEventListener('appinstalled', () => { installEvt = null; render(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 function showSplash() {
-  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let seen = false;
+  try { seen = !!localStorage.getItem('unirad_seen'); localStorage.setItem('unirad_seen', '1'); } catch { /* sem armazenamento */ }
+  const reduce = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || seen;
   const el = document.createElement('div');
   el.className = 'splash';
   el.innerHTML = emblem({ size: 300, text: true, anim: !reduce }) + '<div class="sname">UniRad</div><div class="stag">' + CONFIG.tagline + '</div>';
@@ -879,9 +891,9 @@ function showSplash() {
   const svg = el.querySelector('svg');
   if (!reduce) startSmil(svg);
   let done = false;
-  const close = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => el.remove(), 500); };
+  const close = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => el.remove(), 400); };
   el.addEventListener('click', close);
-  setTimeout(close, reduce ? 1200 : 4700);
+  setTimeout(close, reduce ? 700 : 4700);
 }
 
 (async function start() {
@@ -903,3 +915,42 @@ document.addEventListener('input', (ev) => {
   ml.hidden = false;
 });
 document.addEventListener('pointerdown', (ev) => { if (ev.target.closest('#mlist')) ev.preventDefault(); });
+
+/* cabeçalho esconde ao descer e volta ao subir */
+let lastY = 0;
+window.addEventListener('scroll', () => {
+  if (!ui.user || ui.modal) return;
+  const y = window.scrollY, d = y - lastY;
+  if (Math.abs(d) < 8) return;
+  document.body.classList.toggle('hh', d > 0 && y > 120);
+  lastY = y;
+}, { passive: true });
+
+/* puxar para atualizar */
+(() => {
+  const ind = document.createElement('div');
+  ind.className = 'ptr'; ind.setAttribute('aria-hidden', 'true'); ind.innerHTML = '<i></i>';
+  document.body.appendChild(ind);
+  let y0 = null, pull = 0, busy = false;
+  const reset = () => { ind.style.transition = 'transform .2s, opacity .2s'; ind.style.transform = 'translate(-50%,-50px)'; ind.style.opacity = 0; ind.classList.remove('spin'); y0 = null; pull = 0; };
+  document.addEventListener('touchstart', (e) => {
+    if (busy || e.touches.length !== 1 || window.scrollY > 0 || !ui.user || ui.modal || (ui.tab !== 'inicio' && ui.tab !== 'atrasos')) { y0 = null; return; }
+    y0 = e.touches[0].clientY; ind.style.transition = 'none';
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (y0 === null) return;
+    const d = e.touches[0].clientY - y0;
+    if (d <= 0) { y0 = null; reset(); return; }
+    pull = Math.min(d * 0.5, 90);
+    ind.style.transform = `translate(-50%,${pull - 50}px)`; ind.style.opacity = Math.min(1, pull / 60);
+  }, { passive: true });
+  document.addEventListener('touchend', async () => {
+    if (y0 === null) return;
+    if (pull >= 60) {
+      busy = true; ind.classList.add('spin'); ind.style.transform = 'translate(-50%,16px)';
+      try { await refresh({ quiet: true }); } catch { /* sem rede */ }
+      busy = false;
+    }
+    reset();
+  });
+})();
