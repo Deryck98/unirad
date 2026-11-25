@@ -32,6 +32,8 @@ const api = {
   saveProfile(p) { return call('PATCH', '/me', p); },
   async getUser(id) { return (await call('GET', '/users/' + id)).user; },
   userPosts(id, shared) { return call('GET', `/posts?author=${encodeURIComponent(id)}${shared ? '&shared=1' : ''}`); },
+  adminBackup() { return call('GET', '/admin/backup'); },
+  adminBackupNow() { return call('POST', '/admin/backup'); },
   adminOverview() { return call('GET', '/admin/overview'); },
   adminReports() { return call('GET', '/admin/reports'); },
   adminKeep(id) { return call('POST', `/admin/posts/${id}/keep`); },

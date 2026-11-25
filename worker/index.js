@@ -500,6 +500,31 @@ async function storyAction(env, user, id, action, m) {
   throw new HttpError(404, 'Não encontrado.');
 }
 
+const BACKUP_SKIP = new Set(['sessions', 'push_subs', 'd1_migrations']);
+const BACKUP_KEEP = 14;
+
+async function runBackup(env) {
+  const names = (await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name").all()).results.map((r) => r.name).filter((n) => !BACKUP_SKIP.has(n));
+  const out = {};
+  for (const t of names) {
+    const rows = [];
+    for (let off = 0; off < 200000; off += 5000) {
+      const r = await env.DB.prepare(`SELECT * FROM "${t}" LIMIT 5000 OFFSET ${off}`).all();
+      rows.push(...r.results);
+      if (r.results.length < 5000) break;
+    }
+    out[t] = rows;
+  }
+  const body = JSON.stringify({ app: 'unirad', created: new Date().toISOString(), tables: out });
+  const key = `backups/${new Date().toISOString().slice(0, 10)}.json`;
+  await env.PHOTOS.put(key, body, { httpMetadata: { contentType: 'application/json' } });
+  const list = await env.PHOTOS.list({ prefix: 'backups/' });
+  const old = list.objects.map((o) => o.key).sort().reverse().slice(BACKUP_KEEP);
+  if (old.length) await env.PHOTOS.delete(old);
+  await env.DB.prepare("INSERT INTO config (k, v) VALUES ('last_backup', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(JSON.stringify({ t: Date.now(), size: body.length, tables: names.length, key })).run();
+  return { t: Date.now(), size: body.length, tables: names.length };
+}
+
 async function removePost(env, id) {
   const p = await env.DB.prepare('SELECT image FROM posts WHERE id = ?').bind(id).first();
   if (!p) return;
@@ -513,6 +538,13 @@ async function removePost(env, id) {
     env.DB.prepare('DELETE FROM poll_votes WHERE post_id = ?').bind(id),
     env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(id)
   ]);
+}
+
+const bkRun = [];
+async function rateLimitSimple(env, name, max, win) {
+  const now = Date.now(); while (bkRun.length && now - bkRun[0] > win) bkRun.shift();
+  if (bkRun.length >= max) throw new HttpError(429, 'Muitos backups seguidos. Tente mais tarde.');
+  bkRun.push(now);
 }
 
 async function adminApi(req, env, user, p, m, url) {
@@ -533,6 +565,12 @@ async function adminApi(req, env, user, p, m, url) {
       series, regions: reg.results.map((r) => ({ region: r.region, n: r.n }))
     });
   }
+  if (p === '/api/admin/backup' && m === 'GET') {
+    const r = await env.DB.prepare("SELECT v FROM config WHERE k = 'last_backup'").first();
+    const l = await env.PHOTOS.list({ prefix: 'backups/' });
+    return json({ last: r ? JSON.parse(r.v) : null, count: l.objects.length, keep: BACKUP_KEEP });
+  }
+  if (p === '/api/admin/backup' && m === 'POST') { await rateLimitSimple(env, 'backup', 10, 3600000); return json({ last: await runBackup(env) }); }
   if (p === '/api/admin/reports' && m === 'GET') {
     const r = await env.DB.prepare(
       `SELECT p.id, p.text, p.anon, p.author_name, p.user_id, p.region, p.created_at, p.image,
@@ -685,6 +723,7 @@ async function createDelay(req, env, user) {
 
 /* ---------- entrada ---------- */
 export default {
+  async scheduled(event, env, ctx) { ctx.waitUntil(runBackup(env)); },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);

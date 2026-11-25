@@ -176,7 +176,7 @@ function modalSharePost() {
     <button class="shrow" data-action="copy-link" data-url="${esc(location.origin)}"><span class="shic">${ic('copy', 20)}</span><span><b>Copiar link do app</b></span></button>`);
 }
 /* ---------- Painel do fundador ---------- */
-const ADM_TABS = [['vis', 'Visão'], ['mod', 'Moderação'], ['usr', 'Usuários'], ['avi', 'Avisos']];
+const ADM_TABS = [['vis', 'Visão'], ['mod', 'Moderação'], ['usr', 'Usuários'], ['avi', 'Mais']];
 function modalAdmin() {
   const A = ui.adm || (ui.adm = { tab: 'vis', f: 'pending', q: '' });
   const tabs = `<div class="utabs adm">${ADM_TABS.map(([k, l]) => `<button class="${A.tab === k ? 'on' : ''}" data-action="adm-tab" data-v="${k}">${l}${k === 'mod' && A.ov && A.ov.reports ? `<i class="cnt">${A.ov.reports}</i>` : ''}</button>`).join('')}</div>`;
@@ -200,7 +200,11 @@ function modalAdmin() {
     body = `<input class="asearch" id="admq" type="search" placeholder="Buscar nome, CRTR ou e-mail…" value="${esc(A.q)}" autocomplete="off"><div class="chips">${fl.map(([v, l]) => `<button type="button" class="chip2 ${A.f === v ? 'on' : ''}" data-action="adm-f" data-v="${v}">${l}</button>`).join('')}</div>
       ${!us ? load : `<div class="acard flush" id="admlist">${us.map((u) => `<button class="aurow ${A.sel === u.id ? 'sel' : ''}" data-action="adm-sel" data-id="${u.id}">${avatar(u.name, '', 'sm')}<span class="aun"><b>${esc(u.name)}</b><small class="muted">CRTR ${esc(u.crtr)} · ${esc(regionLabel(u.region).split(' · ')[0])} · ${ago(u.t)}</small></span><span class="atag ${u.suspended ? 'bad' : u.verified ? 'good' : 'warn'}">${u.suspended ? 'Suspenso' : u.verified ? 'Verificado' : 'Conferir'}</span></button>${A.sel === u.id ? `<div class="aact"><p class="muted small">Confira o CRTR no site do conselho da região. ${u.seen ? 'Visto ' + ago(u.seen) + '.' : ''}</p><div class="arow gap8">${u.admin ? '<span class="muted small">Administrador</span>' : `<button class="btn small" data-action="adm-verify" data-id="${u.id}" data-on="${u.verified ? 0 : 1}">${u.verified ? 'Tirar selo' : 'Marcar verificado'}</button><button class="btn out small danger" data-action="adm-susp" data-id="${u.id}" data-on="${u.suspended ? 0 : 1}">${u.suspended ? 'Reativar' : 'Suspender'}</button>`}</div></div>` : ''}`).join('') || '<p class="muted small pad8">Ninguém encontrado.</p>'}</div>`}`;
   } else {
-    body = '<p class="muted small">Avisos oficiais aparecem no topo do feed de todos.</p><button class="btn" data-action="open-announce">Publicar aviso do UniRad</button>';
+    const bk = A.bk, fmt = (t) => new Date(t).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    body = `<div class="acard"><b>Avisos oficiais</b><p class="muted small" style="margin:4px 0 10px">Aparecem no topo do feed de todos.</p><button class="btn" data-action="open-announce">Publicar aviso do UniRad</button></div>
+      <div class="acard"><b>Backup do banco de dados</b><p class="muted small" style="margin:4px 0 10px">Uma cópia automática todo dia (guarda as últimas ${bk ? bk.keep : 14}). Fica no seu Cloudflare, sem senhas de sessão.</p>
+      ${!bk ? '<p class="muted small">Carregando…</p>' : `<p class="small" style="margin:0 0 10px">${bk.last ? `Último backup: <b>${fmt(bk.last.t)}</b> · ${(bk.last.size / 1024).toFixed(0)} KB · ${bk.count} guardados` : 'Ainda não há backup. O primeiro roda de madrugada, ou toque abaixo.'}</p>`}
+      <button class="btn out" data-action="adm-backup">Fazer backup agora</button></div>`;
   }
   return sheet('Painel do fundador', `${tabs}${body}`);
 }
@@ -210,6 +214,7 @@ async function admLoad(tab) {
     if (tab === 'vis') A.ov = await Store.adminOverview();
     else if (tab === 'mod') { A.rep = (await Store.adminReports()).items; if (!A.ov) A.ov = await Store.adminOverview().catch(() => null); }
     else if (tab === 'usr') A.us = (await Store.adminUsers(A.q, A.f)).users;
+    else if (tab === 'avi') A.bk = await Store.adminBackup();
   } catch (e) { toast(e.message); }
   if (ui.modal === 'admin') render();
 }
@@ -1407,7 +1412,8 @@ document.addEventListener('click', async (ev) => {
       sv.del = false; showStory(); return toast('Status apagado.');
     }
     if (a === 'open-admin') { ui.adm = { tab: 'vis', f: 'pending', q: '' }; openModal('admin'); admLoad('vis'); admLoad('mod'); return; }
-    if (a === 'adm-tab') { ui.adm.tab = el.dataset.v; render(); if (el.dataset.v !== 'avi') admLoad(el.dataset.v); return; }
+    if (a === 'adm-tab') { ui.adm.tab = el.dataset.v; render(); admLoad(el.dataset.v); return; }
+    if (a === 'adm-backup') { el.disabled = true; el.textContent = 'Fazendo backup…'; try { await Store.adminBackupNow(); toast('Backup feito.'); } catch (e) { toast(e.message); } admLoad('avi'); return; }
     if (a === 'adm-f') { ui.adm.f = el.dataset.v; ui.adm.us = null; ui.adm.sel = null; render(); admLoad('usr'); return; }
     if (a === 'adm-sel') { ui.adm.sel = ui.adm.sel === el.dataset.id ? null : el.dataset.id; render(); return; }
     if (a === 'adm-keep') { try { await Store.adminKeep(el.dataset.id); ui.adm.rep = ui.adm.rep.filter((x) => x.id !== el.dataset.id); if (ui.adm.ov) ui.adm.ov.reports = ui.adm.rep.length; render(); toast('Post mantido.'); } catch (e) { toast(e.message); } return; }
