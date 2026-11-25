@@ -134,7 +134,7 @@ textarea{resize:vertical}
 .crtrbox span{color:var(--blue,#1a56b8)}
 body.dark-welcome{background:var(--navy)}
 .welcome{color:#fff}
-.welcome .wlogo{background:#fff;border-radius:50%;padding:8px;line-height:0;box-shadow:0 0 0 4px rgba(255,255,255,.15)}
+.welcome .wlogo{background:#fff;border-radius:50%;padding:2px;line-height:0}
 .welcome h1{color:#fff;font-size:44px}
 .welcome .lead{color:#8fb8ff}
 .welcome .muted{color:#b8c4d9}
