@@ -30,7 +30,8 @@ const api = {
   async deleteAccount(password) { await call('DELETE', '/me', { password }); },
   async setAnon(anon) { await call('PATCH', '/me', { anon }); },
   stats(scope) { return call('GET', '/stats?scope=' + encodeURIComponent(scope)); },
-  async posts({ scope, cat }) { return (await call('GET', `/posts?scope=${encodeURIComponent(scope)}&cat=${cat || 'tudo'}`)).posts; },
+  posts({ scope, cat, before }) { return call('GET', `/posts?scope=${encodeURIComponent(scope)}&cat=${cat || 'tudo'}${before ? '&before=' + before : ''}`); },
+  vote(id, opt) { return call('POST', `/posts/${id}/vote`, { opt }); },
   addPost(p) { return call('POST', '/posts', p); },
   toggleLike(id) { return call('POST', `/posts/${id}/like`); },
   addComment(id, text, anon) { return call('POST', `/posts/${id}/comments`, { text, anon }); },
@@ -57,20 +58,21 @@ const demo = {
     const top = Object.entries(by).filter(([, n]) => n >= CONFIG.hideHospitalBelow).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([hospital, n]) => ({ hospital, n }));
     return { members: L.memberCount(s === 'brasil' ? null : s), national: L.memberCount(null), delays: { total: delays.length, avgDays: withDays.length ? Math.round(withDays.reduce((a, d) => a + d.days, 0) / withDays.length) : 0, top } };
   },
+  async vote() {},
   async posts({ scope, cat }) {
     const uid = L.user.id;
-    return L.posts({ scope: scope === 'brasil' ? 'brasil' : Number(scope), cat }).map((p) => ({
+    return { more: false, posts: L.posts({ scope: scope === 'brasil' ? 'brasil' : Number(scope), cat }).map((p) => ({
       id: p.id, cat: p.cat, scope: p.scope, region: p.region, author: p.author, text: p.text, place: p.place || '', salary: p.salary || '', t: p.t,
       likes: p.likes, liked: p.likedBy.includes(uid), mine: !p.sample && p.author === L.user.name && !p.anon, sample: !!p.sample,
-      comments: p.comments.map((c) => ({ id: c.id, author: c.author, text: c.text, t: c.t }))
-    }));
+      comments: p.comments.map((c) => ({ id: c.id, author: c.author, text: c.text, t: c.t })), poll: null
+    })) };
   },
   async addPost(p) { L.addPost({ cat: p.cat, scope: p.scope, region: L.user.region, anon: !!p.anon, author: p.anon ? 'Profissional anônimo' : L.user.name, text: p.text, place: p.place || '', salary: p.salary || '' }); },
   async toggleLike(id) { L.toggleLike(id); },
   async addComment(id, text, anon) { L.addComment(id, text, anon ? 'Profissional anônimo' : L.user.name); },
   async report(id) { L.report(id); },
   async deletePost() {},
-  async addDelay(d) { L.addDelay({ region: L.user.region, hospital: d.hospital, type: d.type, month: d.month, days: d.days, anon: true }); }
+  async addDelay(d) { (d.items || []).forEach((it) => L.addDelay({ region: L.user.region, hospital: d.hospital, type: d.type, month: it.month, days: it.days, anon: true })); }
 };
 
 export async function connect() {

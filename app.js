@@ -4,7 +4,7 @@ import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 let Store = null;
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: true, user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: true, signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -35,10 +35,14 @@ const ICONS = {
   book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
   eyeoff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+  thumb: '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>',
+  share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  poll: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'
 };
 const ic = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
-const CATS = { geral: 'Geral', vagas: 'Vagas', cursos: 'Cursos' };
+const CATS = { geral: 'Geral', vagas: 'Vagas', cursos: 'Cursos', enquete: 'Enquete' };
 
 const scopeOf = (v) => (v === 'mine' ? ui.user.region : v === 'brasil' ? 'brasil' : Number(v));
 const viewName = (v) => (v === 'mine' ? regionLabel(ui.user.region).split(' · ')[0] : v === 'brasil' ? 'Brasil todo' : regionLabel(v).split(' · ')[0]);
@@ -55,25 +59,52 @@ function viewSwitch() {
   </div>`;
 }
 
+const initials = (n) => String(n).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+const isAnon = (n) => n === 'Profissional anônimo';
+const avatar = (n) => (isAnon(n) ? `<div class="avatar">${ic('user', 18)}</div>` : `<div class="avatar ini">${esc(initials(n))}</div>`);
+
+function pollHtml(p) {
+  const pl = p.poll;
+  if (!pl) return '';
+  const voted = pl.voted !== null && pl.voted !== undefined;
+  return `<div class="poll">${pl.options.map((o, i) => {
+    const pct = pl.total ? Math.round((o.n / pl.total) * 100) : 0;
+    return voted
+      ? `<div class="opt res ${pl.voted === i ? 'mine' : ''}" style="--w:${pct}%"><span>${esc(o.t)}</span><b>${pct}%</b></div>`
+      : `<button class="opt" data-action="vote" data-id="${p.id}" data-i="${i}">${esc(o.t)}</button>`;
+  }).join('')}<div class="muted small">${pl.total} ${pl.total === 1 ? 'voto' : 'votos'}${voted ? '' : ' · escolha uma opção'}</div></div>`;
+}
+
 function postCard(p) {
   const open = ui.open[p.id];
   return `<article class="card post">
-    <div class="row between">
-      <div class="row gap8"><div class="avatar">${ic('user', 16)}</div>
-        <div><div class="name">${esc(p.author)}${p.sample ? ' <span class="tag">exemplo</span>' : ''}</div>
-        <div class="muted small">${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</div></div></div>
+    <div class="row gap8 head">
+      ${avatar(p.author)}
+      <div class="grow"><div class="name">${esc(p.author)}${p.sample ? ' <span class="tag">exemplo</span>' : ''}</div>
+        <div class="muted small">${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</div></div>
       <span class="chip c-${p.cat}">${CATS[p.cat]}</span>
     </div>
     <p class="body">${esc(p.text).replace(/\n/g, '<br>')}</p>
+    ${pollHtml(p)}
     ${p.place || p.salary ? `<div class="meta">${p.place ? `<span>${ic('briefcase', 14)} ${esc(p.place)}</span>` : ''}${p.salary ? `<span>Salário: ${esc(p.salary)}</span>` : ''}</div>` : ''}
-    <div class="row gap16 act">
-      <button class="ghost ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}" aria-label="Curtir">${ic('heart', 18)} ${p.likes}</button>
-      <button class="ghost" data-action="toggle-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 18)} ${p.comments.length}</button>
-      ${p.mine ? `<button class="ghost right" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button>` : `<button class="ghost right" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 16)}</button>`}
+    <div class="counts muted small"><span>${p.likes} ${p.likes === 1 ? 'curtida' : 'curtidas'}</span><span>${p.comments.length} ${p.comments.length === 1 ? 'comentário' : 'comentários'}</span></div>
+    <div class="actions">
+      <button class="act ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}">${ic('thumb', 20)}<span>Curtir</span></button>
+      <button class="act" data-action="toggle-comments" data-id="${p.id}">${ic('msg', 20)}<span>Comentar</span></button>
+      <button class="act" data-action="share" data-id="${p.id}">${ic('share', 20)}<span>Compartilhar</span></button>
+      ${p.mine ? `<button class="act mini" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button>` : `<button class="act mini" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 18)}</button>`}
     </div>
-    ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
+    ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm">${avatar(c.author)}<div class="bubble"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div></div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
       <form class="row gap8" data-form="comment" data-id="${p.id}"><input name="t" maxlength="300" placeholder="Escreva um comentário" required autocomplete="off"><button class="btn small" type="submit">Enviar</button></form></div>` : ''}
   </article>`;
+}
+
+function composer() {
+  return `<div class="card composer"><div class="row gap8">
+    ${ui.user.anon ? `<div class="avatar">${ic('user', 18)}</div>` : `<div class="avatar ini">${esc(initials(ui.user.name))}</div>`}
+    <button class="fake" data-action="new-post">Compartilhe algo…</button>
+    ${Store.mode === 'api' ? `<button class="ghost" data-action="new-poll" aria-label="Criar enquete">${ic('poll', 24)}</button>` : ''}
+  </div></div>`;
 }
 
 function sheet(title, inner) {
@@ -93,25 +124,32 @@ const TERMS = `<ul class="rules">
 const loadingBox = '<div class="center muted pad8" role="status">Carregando…</div>';
 
 /* ---------- telas ---------- */
+let installEvt = null;
+const standalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+const installBtn = (cls = 'btn out') => (standalone() ? '' : `<button class="${cls}" data-action="install">${ic('download', 18)} Instalar app</button>`);
+
 function screenWelcome() {
   return `<main class="welcome">
-    <div class="wlogo">${emblem({ size: 170, text: false })}</div>
+    <div class="wlogo">${emblem({ size: 128, text: false })}</div>
     <h1>UniRad</h1>
     <p class="lead">${CONFIG.tagline}</p>
-    <p class="muted center">A rede dos técnicos e tecnólogos em radiologia. Aqui a gente se une, mostra a realidade da categoria e luta por piso, jornada e salário em dia.</p>
+    <p class="muted center">A rede dos técnicos e tecnólogos em radiologia, por piso, jornada e salário em dia.</p>
     <ul class="points">
       <li>${ic('check', 20)} Só quem tem CRTR entra</li>
-      <li>${ic('check', 20)} Relatos de atraso, anônimos se quiser</li>
+      <li>${ic('check', 20)} Relatos anônimos se quiser</li>
       <li>${ic('check', 20)} Sua região e o Brasil todo</li>
     </ul>
     <button class="btn big" data-action="go-signup">Criar meu cadastro</button>
     ${Store.mode === 'api' ? '<button class="btn out" data-action="go-login">Já tenho conta</button>' : ''}
+    ${installBtn('btn out slim')}
     ${Store.mode === 'demo' ? '<p class="muted small center">Versão de demonstração: os dados ficam só neste aparelho.</p>' : ''}
   </main>`;
 }
 
+const pw = (name, label, ph, ac, val = '') => `<label>${label} <i class="req">*</i><span class="pwbox"><input name="${name}" type="password" autocomplete="${ac}" required minlength="6" placeholder="${ph}" value="${esc(val)}"><button type="button" class="eye" data-action="toggle-pw" aria-label="Mostrar senha">${ic('eye', 22)}</button></span></label>`;
+
 function screenLogin() {
-  return `<main class="pad">
+  return `<main class="pad fit">
     <button class="ghost back" data-action="go-welcome">← Voltar</button>
     <h2>Entrar</h2>
     <form data-form="login" novalidate>
@@ -131,24 +169,36 @@ function regionListHtml() {
 const pickedHtml = () => (ui.regionPick ? `${ic('check', 18)} ${esc(regionLabel(ui.regionPick))}` : '');
 
 function screenSignup() {
-  return `<main class="pad">
+  const sd = ui.sd;
+  if (ui.signupStep === 1) {
+    return `<main class="pad fit">
     <button class="ghost back" data-action="go-welcome">← Voltar</button>
     <h2>Criar cadastro</h2>
-    <p class="muted">Só profissionais da radiologia. Leva 1 minuto.</p>
+    <p class="muted">Passo 1 de 2 · seus dados de acesso</p>
+    <form data-form="signup1" novalidate>
+      <label>Nome completo <i class="req">*</i><input name="name" autocomplete="name" required minlength="5" placeholder="Seu nome" value="${esc(sd.name || '')}"></label>
+      <label>E-mail <i class="req">*</i><input name="email" type="email" autocomplete="email" required placeholder="voce@email.com" value="${esc(sd.email || '')}"></label>
+      ${pw('password', 'Senha', 'Mínimo 6 caracteres', 'new-password', sd.password || '')}
+      ${pw('password2', 'Confirmar senha', 'Repita a senha', 'new-password', sd.password || '')}
+      <div class="error" id="formError" role="alert"></div>
+      <button class="btn big" type="submit">Continuar</button>
+    </form>
+  </main>`;
+  }
+  return `<main class="pad">
+    <button class="ghost back" data-action="signup-back">← Voltar</button>
+    <h2>Criar cadastro</h2>
+    <p class="muted">Passo 2 de 2 · seu registro profissional</p>
     <form data-form="signup" novalidate>
-      <label>Nome completo <i class="req">*</i><input name="name" autocomplete="name" required minlength="5" placeholder="Seu nome"></label>
-      <label>E-mail <i class="req">*</i><input name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
-      <label>Senha <i class="req">*</i><span class="pwbox"><input name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="Mínimo 6 caracteres"><button type="button" class="eye" data-action="toggle-pw" aria-label="Mostrar senha">${ic('eye', 22)}</button></span></label>
-      <label>Confirmar senha <i class="req">*</i><span class="pwbox"><input name="password2" type="password" autocomplete="new-password" required minlength="6" placeholder="Repita a senha"><button type="button" class="eye" data-action="toggle-pw" aria-label="Mostrar senha">${ic('eye', 22)}</button></span></label>
       <label>Função <i class="req">*</i>
         <select name="role" id="roleSel" required><option value="">Selecione</option><option>Técnico em Radiologia</option><option>Tecnólogo em Radiologia</option></select></label>
       <div class="field">Número do CRTR <i class="req">*</i>
         <div class="crtrbox"><input name="crtr" id="crtrIn" inputmode="numeric" autocomplete="off" required maxlength="6" placeholder="00000" style="width:calc(5ch + 16px)" aria-label="Número do CRTR, só os números"><span id="crtrLetter">T</span></div>
-        <div class="muted small">Digite só os números. A letra (T para técnico, N para tecnólogo) entra sozinha.</div></div>
+        <div class="muted small">Só os números. A letra (T técnico, N tecnólogo) entra sozinha.</div></div>
       <div class="field">Região do seu CRTR <i class="req">*</i>
         <div class="search">${ic('search', 18)}<input id="regionSearch" value="${esc(ui.regionQuery)}" placeholder="Busque: 19, Amazonas, Pará…" autocomplete="off"></div>
         <div class="picked" id="picked">${pickedHtml()}</div>
-        <div class="reglist" id="reglist">${regionListHtml()}</div>
+        <div class="reglist short" id="reglist">${regionListHtml()}</div>
       </div>
       <label class="check"><input type="checkbox" name="anon" ${ui.anonDefault ? 'checked' : ''}><span>Postar como anônimo por padrão <span class="muted small">(você escolhe em cada post)</span></span></label>
       <label class="check"><input type="checkbox" name="terms" required><span>Li e aceito as <a href="#" data-action="show-terms">regras do UniRad</a> <i class="req">*</i></span></label>
@@ -180,6 +230,7 @@ function screenHome() {
       : `<p class="muted small">Locais aparecem aqui quando houver ao menos ${CONFIG.hideHospitalBelow} relatos sobre o mesmo, para proteger quem relata.</p>`}
     <button class="btn big" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>
     <h3 class="sec">Na comunidade</h3>
+    ${composer()}
     ${recent.map(postCard).join('') || '<p class="muted">Ainda não há publicações aqui. Seja o primeiro.</p>'}
   </main>`;
 }
@@ -187,9 +238,10 @@ function screenHome() {
 function screenFeed() {
   return `<main class="pad">
     ${viewSwitch()}
-    <div class="chips">${['tudo', 'geral', 'vagas', 'cursos'].map((c) => `<button class="chip btnchip ${ui.cat === c ? 'on' : ''}" data-action="cat" data-c="${c}">${c === 'tudo' ? 'Tudo' : CATS[c]}</button>`).join('')}</div>
-    <button class="btn big" data-action="new-post">${ic('plus', 18)} Nova publicação</button>
+    <div class="chips">${['tudo', 'geral', 'vagas', 'cursos', 'enquete'].filter((c) => c !== 'enquete' || Store.mode === 'api').map((c) => `<button class="chip btnchip ${ui.cat === c ? 'on' : ''}" data-action="cat" data-c="${c}">${c === 'tudo' ? 'Tudo' : CATS[c]}</button>`).join('')}</div>
+    ${composer()}
     ${!ui.posts ? loadingBox : ui.posts.map(postCard).join('') || '<p class="muted center pad8">Nada por aqui ainda. Seja o primeiro a publicar.</p>'}
+    ${ui.more ? '<button class="btn out" data-action="load-more">Ver mais publicações</button>' : ''}
   </main>`;
 }
 
@@ -197,8 +249,7 @@ const RIGHTS = [
   ['Jornada de trabalho', 'A Lei 7.394/1985 prevê jornada de 24 horas semanais para os profissionais das técnicas radiológicas. Se o seu contrato é diferente, anote horários e guarde comprovantes.'],
   ['Piso salarial', 'A mesma lei fala em salário mínimo profissional equivalente a 2 salários mínimos. Como esse piso é aplicado hoje é debatido na Justiça, então confirme com advogado trabalhista ou com o CRTR antes de cobrar.'],
   ['Adicional de risco e insalubridade', 'A lei prevê adicional de 40% sobre o vencimento. Verifique no seu contracheque se ele aparece.'],
-  ['Salário atrasado: o que fazer', 'Guarde contracheques, extratos e mensagens. Registre o relato aqui no mural e procure orientação do CRTR, do Ministério Público do Trabalho ou de um advogado trabalhista.'],
-  ['Outras profissões na área', 'Esse tema está em debate entre os conselhos das categorias. Esta seção será escrita junto com o CRTR e com um advogado, para ficar correta e sem risco.']
+  ['Salário atrasado: o que fazer', 'Guarde contracheques, extratos e mensagens. Registre o relato aqui no mural e procure orientação do CRTR, do Ministério Público do Trabalho ou de um advogado trabalhista.']
 ];
 function screenRights() {
   return `<main class="pad"><h2>Direitos</h2>
@@ -216,6 +267,7 @@ function screenProfile() {
       <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Postar como anônimo por padrão</span></label>
     </div>
     <p class="muted small">Seu número do CRTR, e-mail e senha não aparecem para ninguém.</p>
+    ${installBtn()}
     <button class="btn out" data-action="show-terms">Ver regras do UniRad</button>
     <button class="btn out" data-action="logout">Sair</button>
     <button class="btn out danger" data-action="ask-delete">Apagar minha conta e meus dados</button>
@@ -223,34 +275,46 @@ function screenProfile() {
   </main>`;
 }
 
+const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 function modalDelay() {
-  const months = [];
   const d = new Date();
-  for (let i = 0; i < 4; i++) months.push(new Date(d.getFullYear(), d.getMonth() - i, 1));
-  const mname = (x) => x.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const months = [];
+  for (let i = 0; i < 6; i++) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); months.push({ v: `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`, l: `${MES[x.getMonth()]}/${x.getFullYear()}` }); }
   return sheet('Relatar atraso', `<form data-form="delay" novalidate>
-    <label>Hospital ou clínica<input name="hospital" required maxlength="80" placeholder="Nome do local"></label>
-    <label>O que aconteceu<select name="type">${DELAY_TYPES.map((t) => `<option>${esc(t)}</option>`).join('')}</select></label>
-    <label>Mês de referência<select name="month">${months.map((x) => `<option value="${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}">${esc(mname(x))}</option>`).join('')}</select></label>
-    <label>Dias de atraso (se souber)<input name="days" type="number" min="0" max="365" inputmode="numeric" placeholder="0"></label>
+    <label>Hospital ou clínica <i class="req">*</i><input name="hospital" required maxlength="80" placeholder="Nome do local"></label>
+    <label>O que aconteceu <i class="req">*</i><select name="type">${DELAY_TYPES.map((t) => `<option>${esc(t)}</option>`).join('')}</select></label>
+    <div class="field">Meses em atraso <i class="req">*</i> <span class="muted small">(toque para marcar)</span>
+      <div class="mchips">${months.map((m) => `<button type="button" class="mchip" data-action="toggle-month" data-m="${m.v}">${m.l}</button>`).join('')}</div></div>
+    ${months.map((m) => `<div class="drow" data-m="${m.v}" hidden><span>${m.l}</span><input type="number" min="0" max="31" inputmode="numeric" placeholder="dias de atraso" aria-label="Dias de atraso em ${m.l}"></div>`).join('')}
     <p class="muted small">Seu relato aparece só somado aos outros, sem seu nome. Relate só fatos e nada de dados de pacientes.</p>
     <div class="error" id="formError" role="alert"></div>
     <button class="btn big" type="submit">Enviar relato</button></form>`);
 }
 
 function modalPost() {
-  return sheet('Nova publicação', `<form data-form="post" novalidate>
-    <label>Tipo<select name="cat" id="catSel"><option value="geral">Geral</option><option value="vagas">Vaga</option><option value="cursos">Curso / capacitação</option></select></label>
-    <label>Texto<textarea name="text" required maxlength="800" rows="4" placeholder="Escreva aqui"></textarea></label>
-    <div id="vagaExtra" hidden>
+  const c = ui.postCat;
+  return sheet(c === 'enquete' ? 'Nova enquete' : 'Nova publicação', `<form data-form="post" novalidate>
+    <label>Tipo<select name="cat" id="catSel"><option value="geral" ${c === 'geral' ? 'selected' : ''}>Geral</option><option value="vagas" ${c === 'vagas' ? 'selected' : ''}>Vaga</option><option value="cursos" ${c === 'cursos' ? 'selected' : ''}>Curso / capacitação</option>${Store.mode === 'api' ? `<option value="enquete" ${c === 'enquete' ? 'selected' : ''}>Enquete</option>` : ''}</select></label>
+    <label><span id="textLabel">${c === 'enquete' ? 'Pergunta' : 'Texto'}</span> <i class="req">*</i><textarea name="text" required maxlength="800" rows="4" placeholder="Escreva aqui"></textarea></label>
+    <div id="vagaExtra" ${c === 'vagas' ? '' : 'hidden'}>
       <label>Local<input name="place" maxlength="80" placeholder="Hospital ou clínica"></label>
       <label>Salário<input name="salary" maxlength="30" placeholder="Ex.: R$ 3.500"></label>
+    </div>
+    <div id="pollExtra" ${c === 'enquete' ? '' : 'hidden'}>
+      ${[1, 2, 3, 4].map((n) => `<label>Opção ${n}${n < 3 ? ' <i class="req">*</i>' : ' <span class="muted small">(opcional)</span>'}<input name="poll${n}" maxlength="40" placeholder="Resposta ${n}"></label>`).join('')}
     </div>
     <label>Onde aparece<select name="scope"><option value="regiao">Só na minha região</option><option value="brasil">Brasil todo</option></select></label>
     <label class="check"><input type="checkbox" name="anon" ${ui.user.anon ? 'checked' : ''}><span>Publicar como anônimo</span></label>
     <p class="muted small">Não publique dados de pacientes, exames ou imagens.</p>
     <div class="error" id="formError" role="alert"></div>
     <button class="btn big" type="submit">Publicar</button></form>`);
+}
+
+function modalInstall() {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return sheet('Instalar o UniRad', ios
+    ? '<ol class="steps"><li>Toque no botão <b>Compartilhar</b> do Safari (o quadrado com seta).</li><li>Escolha <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>.</li></ol>'
+    : '<ol class="steps"><li>Toque nos <b>três pontinhos</b> do navegador.</li><li>Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li><li>Confirme.</li></ol>');
 }
 
 function modalDeleteAccount() {
@@ -278,7 +342,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, comunidade: screenFeed, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -293,11 +357,11 @@ async function refresh({ quiet = false } = {}) {
     if (ui.tab === 'inicio') {
       const [stats, posts] = await Promise.all([Store.stats(scope), Store.posts({ scope, cat: 'tudo' })]);
       if (seq !== ui.seq) return;
-      ui.stats = stats; ui.posts = posts;
+      ui.stats = stats; ui.posts = posts.posts; ui.more = posts.more;
     } else if (ui.tab === 'comunidade') {
       const posts = await Store.posts({ scope, cat: ui.cat });
       if (seq !== ui.seq) return;
-      ui.posts = posts;
+      ui.posts = posts.posts; ui.more = posts.more;
     } else { return render(); }
   } catch (e) {
     if (seq !== ui.seq) return;
@@ -327,7 +391,11 @@ function bindSignup() {
 }
 function bindModal() {
   const c = document.getElementById('catSel');
-  if (c) c.addEventListener('change', () => { document.getElementById('vagaExtra').hidden = c.value !== 'vagas'; });
+  if (c) c.addEventListener('change', () => {
+    document.getElementById('vagaExtra').hidden = c.value !== 'vagas';
+    document.getElementById('pollExtra').hidden = c.value !== 'enquete';
+    document.getElementById('textLabel').textContent = c.value === 'enquete' ? 'Pergunta' : 'Texto';
+  });
 }
 const err = (m) => { const e = document.getElementById('formError'); if (e) e.textContent = m; };
 const busy = (f, on) => { const b = f.querySelector('button[type=submit]'); if (b) { b.disabled = on; b.style.opacity = on ? '.6' : ''; } };
@@ -348,7 +416,31 @@ document.addEventListener('click', async (ev) => {
       const inp = el.parentElement.querySelector('input'); const show = inp.type === 'password';
       inp.type = show ? 'text' : 'password'; el.innerHTML = ic(show ? 'eyeoff' : 'eye', 22); el.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha'); return;
     }
-    if (a === 'go-signup') { ui.screen = 'signup'; return render(); }
+    if (a === 'go-signup') { ui.screen = 'signup'; ui.signupStep = 1; return render(); }
+    if (a === 'signup-back') { ui.signupStep = 1; return render(); }
+    if (a === 'install') {
+      if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch { /* ignorado */ } installEvt = null; return render(); }
+      if (!ui.user) { document.getElementById('modalRoot').innerHTML = modalInstall(); return; }
+      ui.modal = 'install'; return render();
+    }
+    if (a === 'toggle-month') {
+      el.classList.toggle('on');
+      const row = document.querySelector(`.drow[data-m="${el.dataset.m}"]`);
+      if (row) { row.hidden = !el.classList.contains('on'); if (!row.hidden) row.querySelector('input').focus(); }
+      return;
+    }
+    if (a === 'vote') { await Store.vote(el.dataset.id, Number(el.dataset.i)); return refresh({ quiet: true }); }
+    if (a === 'share') {
+      const data = { title: 'UniRad', text: 'UniRad: a força da radiologia unida. Entre com seu CRTR.', url: location.origin };
+      if (navigator.share) { try { await navigator.share(data); } catch { /* cancelado */ } return; }
+      try { await navigator.clipboard.writeText(data.url); toast('Link copiado.'); } catch { toast(data.url); }
+      return;
+    }
+    if (a === 'load-more') {
+      const last = ui.posts[ui.posts.length - 1];
+      const r = await Store.posts({ scope: scopeOf(ui.view), cat: ui.tab === 'inicio' ? 'tudo' : ui.cat, before: last && last.t });
+      ui.posts = ui.posts.concat(r.posts); ui.more = r.more; return render();
+    }
     if (a === 'go-login') { ui.screen = 'login'; return render(); }
     if (a === 'go-welcome') { ui.screen = 'welcome'; return render(); }
     if (a === 'pick-region') { ui.regionPick = Number(el.dataset.id); document.getElementById('picked').innerHTML = pickedHtml(); document.getElementById('reglist').innerHTML = regionListHtml(); return; }
@@ -356,7 +448,8 @@ document.addEventListener('click', async (ev) => {
     if (a === 'view') { ui.view = el.dataset.v; return refresh(); }
     if (a === 'cat') { ui.cat = el.dataset.c; return refresh({ quiet: true }); }
     if (a === 'new-delay') { ui.modal = 'delay'; return render(); }
-    if (a === 'new-post') { ui.modal = 'post'; return render(); }
+    if (a === 'new-post') { ui.postCat = 'geral'; ui.modal = 'post'; return render(); }
+    if (a === 'new-poll') { ui.postCat = 'enquete'; ui.modal = 'post'; return render(); }
     if (a === 'ask-delete') { ui.modal = 'delete'; return render(); }
     if (a === 'like') { await Store.toggleLike(el.dataset.id); return refresh({ quiet: true }); }
     if (a === 'toggle-comments') { ui.open[el.dataset.id] = !ui.open[el.dataset.id]; return render(); }
@@ -386,16 +479,21 @@ document.addEventListener('submit', async (ev) => {
   const d = new FormData(f);
   err('');
   try {
-    if (kind === 'signup') {
+    if (kind === 'signup1') {
       const name = String(d.get('name') || '').trim();
       const email = String(d.get('email') || '').trim();
       const password = String(d.get('password') || '');
-      const digits = String(d.get('crtr') || '').replace(/\D/g, '');
-      const crtr = digits.padStart(5, '0') + (String(d.get('role')).startsWith('Tecnólogo') ? 'N' : 'T');
       if (name.length < 5) return err('Digite seu nome completo.');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return err('Digite um e-mail válido.');
       if (password.length < 6) return err('A senha precisa ter pelo menos 6 caracteres.');
       if (password !== String(d.get('password2') || '')) return err('As senhas não são iguais. Digite de novo.');
+      ui.sd = { name, email, password }; ui.signupStep = 2; window.scrollTo(0, 0);
+      return render();
+    }
+    if (kind === 'signup') {
+      const { name, email, password } = ui.sd;
+      const digits = String(d.get('crtr') || '').replace(/\D/g, '');
+      const crtr = digits.padStart(5, '0') + (String(d.get('role')).startsWith('Tecnólogo') ? 'N' : 'T');
       if (digits.length < 3 || digits.length > 6) return err('Digite o número do CRTR (só os números).');
       if (!d.get('role')) return err('Escolha sua função.');
       if (!ui.regionPick) return err('Escolha a região do seu CRTR.');
@@ -403,7 +501,7 @@ document.addEventListener('submit', async (ev) => {
       busy(f, true);
       try { ui.user = await Store.signup({ name, email, password, crtr, role: String(d.get('role')), region: ui.regionPick, anon: !!d.get('anon') }); }
       finally { busy(f, false); }
-      ui.tab = 'inicio'; ui.view = 'mine'; window.scrollTo(0, 0);
+      ui.tab = 'inicio'; ui.view = 'mine'; ui.sd = {}; window.scrollTo(0, 0);
       return refresh();
     }
     if (kind === 'login') {
@@ -416,8 +514,10 @@ document.addEventListener('submit', async (ev) => {
     if (kind === 'delay') {
       const hospital = String(d.get('hospital') || '').trim();
       if (!hospital) return err('Informe o hospital ou a clínica.');
+      const items = [...f.querySelectorAll('.mchip.on')].map((c) => ({ month: c.dataset.m, days: Math.max(0, Math.min(31, Number(f.querySelector(`.drow[data-m="${c.dataset.m}"] input`).value) || 0)) }));
+      if (!items.length) return err('Marque pelo menos um mês em atraso.');
       busy(f, true);
-      try { await Store.addDelay({ hospital, type: String(d.get('type')), month: String(d.get('month')), days: Math.max(0, Number(d.get('days')) || 0) }); }
+      try { await Store.addDelay({ hospital, type: String(d.get('type')), items }); }
       finally { busy(f, false); }
       ui.modal = null; toast('Relato enviado.');
       return refresh();
@@ -426,9 +526,11 @@ document.addEventListener('submit', async (ev) => {
       const text = String(d.get('text') || '').trim();
       if (text.length < 3) return err('Escreva algo na publicação.');
       const cat = String(d.get('cat'));
+      const poll = cat === 'enquete' ? [1, 2, 3, 4].map((n) => String(d.get('poll' + n) || '').trim()).filter(Boolean) : null;
+      if (cat === 'enquete' && poll.length < 2) return err('A enquete precisa de pelo menos 2 opções.');
       busy(f, true);
       try {
-        await Store.addPost({ cat, scope: String(d.get('scope')), anon: !!d.get('anon'), text, place: cat === 'vagas' ? String(d.get('place') || '').trim() : '', salary: cat === 'vagas' ? String(d.get('salary') || '').trim() : '' });
+        await Store.addPost({ cat, poll, scope: String(d.get('scope')), anon: !!d.get('anon'), text, place: cat === 'vagas' ? String(d.get('place') || '').trim() : '', salary: cat === 'vagas' ? String(d.get('salary') || '').trim() : '' });
       } finally { busy(f, false); }
       ui.modal = null; ui.tab = 'comunidade'; ui.cat = 'tudo';
       return refresh();
@@ -448,6 +550,8 @@ document.addEventListener('submit', async (ev) => {
   } catch (e) { err(e.message); toast(e.message); }
 });
 
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; if (!ui.user) render(); });
+window.addEventListener('appinstalled', () => { installEvt = null; render(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 function showSplash() {
