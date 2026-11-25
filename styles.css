@@ -1,3 +1,4 @@
+@font-face{font-family:"UniBrand";src:url("fonts/bitter-unirad.woff") format("woff");font-weight:800;font-display:swap}
 :root{--navy:#0b1f3a;--blue:#1f6feb;--gold:#f5b301;--bg:#f3f5f9;--card:#fff;--line:#e3e8f0;--text:#14213a;--muted:#5f6b80;--red:#c62828;--redbg:#fdeaea;--amberbg:#fff3d6;--amber:#8a5a00;--green:#1b7f4b;--r:14px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45}
@@ -125,3 +126,5 @@ textarea{resize:vertical}
 .splash .sname{font-size:30px;font-weight:700;color:#0b1f3a;opacity:0;animation:eFade .6s ease 3.4s both}
 .splash .stag{font-size:15px;color:#5f6b80;opacity:0;animation:eFade .6s ease 3.7s both;margin-top:-8px}
 .top .emblem{border-radius:50%;background:#fff;flex:none}
+
+.top b,.splash .sname,.welcome h1{font-family:"UniBrand",Georgia,serif;font-weight:800}
