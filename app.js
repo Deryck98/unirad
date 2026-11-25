@@ -136,7 +136,7 @@ function commentsList(p) {
   const one = (c, isRep) => {
     const rs = isRep ? [] : reps(c.id);
     return `<div class="cmt ${isRep ? 'rep' : ''}">
-      ${avatar(c.author, null, isRep ? 'sm' : '')}
+      ${avatar(c.author, c.avatar, isRep ? 'sm' : '')}
       <div class="cbody"><div class="cmeta"><b>${esc(c.author)}</b> <span class="muted">· ${ago(c.t)}</span></div>
         <div class="ctext">${mentionHtml(c.text, names)}</div>
         <div class="cacts">${api ? `<button data-action="reply" data-id="${c.id}" data-name="${esc(c.author)}">Responder</button>` : ''}${rs.length ? `<button data-action="toggle-replies" data-id="${c.id}">${ui.rep[c.id] ? 'Ocultar respostas' : `Ver ${rs.length} ${rs.length === 1 ? 'resposta' : 'respostas'}`}</button>` : ''}</div></div>
@@ -148,7 +148,7 @@ function commentsList(p) {
 function modalComments() {
   const p = (ui.posts || []).find((x) => x.id === ui.cpost);
   if (!p) return '';
-  return `<div class="overlay" data-action="close-modal"><div class="sheet csheet" role="dialog" aria-label="Comentários" data-stop="1" id="csheet">
+  return `<div class="overlay" id="cov" data-action="close-modal"><div class="sheet csheet" role="dialog" aria-label="Comentários" data-stop="1" id="csheet">
     <div class="grab" id="cgrab"><i></i></div><div class="ctitle">Comentários</div>
     <div class="clist" id="clist">${commentsList(p)}</div>
     <div class="mlist" id="mlist" hidden></div>
@@ -465,6 +465,7 @@ window.addEventListener('popstate', () => {
 
 function render() {
   document.body.classList.toggle('dark-welcome', !ui.user);
+  document.body.classList.toggle('noscroll', ui.modal === 'comments' || ui.modal === 'menu');
   if (!ui.user) {
     $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
@@ -543,20 +544,39 @@ function showPhotoPrev() {
   img.src = URL.createObjectURL(ui.photoBlob);
   document.getElementById('photoPrev').hidden = false; document.getElementById('photoBtn').hidden = true;
 }
-function bindMenuSwipe(gid = 'grab', sid = 'msheet', onlyGrab = false) {
-  const g = document.getElementById(gid), s = document.getElementById(sid);
-  if (!g || !s) return;
-  let y0 = null, dy = 0;
+function bindSheetDrag(sid, scrollId) {
+  const s = document.getElementById(sid); if (!s) return;
+  const sc = scrollId ? document.getElementById(scrollId) : null;
+  let y0 = null, dy = 0, active = false;
+  s.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || e.target.closest('.cform, .mlist')) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0; active = false; s.style.transition = 'none';
+  }, { passive: true });
+  s.addEventListener('touchmove', (e) => {
+    if (y0 === null) return;
+    const d = e.touches[0].clientY - y0;
+    if (!active) {
+      const scrolled = sc && sc.contains(e.target) && sc.scrollTop > 0;
+      if (d > 8 && !scrolled) active = true;
+      else if (d < -8 || scrolled) { y0 = null; return; }
+      else return;
+    }
+    dy = d; e.preventDefault(); s.style.transform = `translateY(${Math.max(0, d)}px)`;
+  }, { passive: false });
   const end = () => {
-    if (y0 === null) return; const d = dy; y0 = null; s.style.transition = 'transform .2s'; 
-    if (d > 70) { s.style.transform = 'translateY(100%)'; setTimeout(closeModal, 150); } else s.style.transform = '';
+    if (!active) { y0 = null; return; }
+    const d = dy; y0 = null; active = false; s.style.transition = 'transform .2s';
+    if (d > 90) { s.style.transform = 'translateY(100%)'; setTimeout(closeModal, 150); } else s.style.transform = '';
   };
-  s.addEventListener('pointerdown', (e) => { if (onlyGrab ? !e.target.closest('#' + gid + ',.ctitle') : (e.target.closest('.mi') && !e.target.closest('#' + gid))) return; y0 = e.clientY; dy = 0; s.style.transition = 'none'; try { s.setPointerCapture(e.pointerId); } catch { /* ok */ } });
-  s.addEventListener('pointermove', (e) => { if (y0 === null) return; dy = e.clientY - y0; s.style.transform = `translateY(${dy > 0 ? dy : dy / 4}px)`; });
-  s.addEventListener('pointerup', end); s.addEventListener('pointercancel', end);
+  s.addEventListener('touchend', end); s.addEventListener('touchcancel', end);
 }
+function fitSheet() {
+  const ov = document.getElementById('cov'), v = window.visualViewport; if (!ov || !v) return;
+  ov.style.top = v.offsetTop + 'px'; ov.style.height = v.height + 'px'; ov.style.bottom = 'auto';
+}
+if (window.visualViewport) { window.visualViewport.addEventListener('resize', fitSheet); window.visualViewport.addEventListener('scroll', fitSheet); }
 function bindModal() {
-  bindMenuSwipe(); bindMenuSwipe('cgrab', 'csheet', true);
+  bindSheetDrag('msheet'); bindSheetDrag('csheet', 'clist'); fitSheet();
   const pin = document.getElementById('photoIn');
   if (pin) {
     pin.addEventListener('change', async () => {

@@ -287,8 +287,8 @@ button.opt.res{width:100%;text-align:left}
 @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
 .mine-btns{display:flex;flex:none}
 
-.msheet{padding:6px 14px calc(14px + env(safe-area-inset-bottom));touch-action:none;border-radius:20px 20px 0 0}
-.grab{display:flex;justify-content:center;padding:8px 0 12px;cursor:grab}
+.msheet{padding:6px 14px calc(14px + env(safe-area-inset-bottom));border-radius:20px 20px 0 0}
+.grab{display:flex;justify-content:center;padding:8px 0 12px}
 .grab i{width:42px;height:5px;border-radius:5px;background:#c5cddb}
 .mi{display:flex;align-items:center;gap:14px;width:100%;min-height:54px;padding:0 10px;font-size:17px;font-weight:600;border-radius:12px;text-align:left}
 .mi:active{background:#eef2f8}
@@ -300,9 +300,8 @@ button.opt.res{width:100%;text-align:left}
 /* raio = curtir */
 .actions .act.liked{color:#b8860b}
 .actions .act.liked svg{fill:#f5b301;stroke:#c98f00}
-.csheet{display:flex;flex-direction:column;padding:0;height:85vh;height:85dvh;max-height:85dvh;overflow:hidden}
-.ctitle{text-align:center;font-weight:700;font-size:15px;padding:0 0 10px;border-bottom:1px solid var(--line);touch-action:none}
-.csheet .grab{touch-action:none}
+.csheet{display:flex;flex-direction:column;padding:0;height:88%;max-height:100%;overflow:hidden}
+.ctitle{text-align:center;font-weight:700;font-size:15px;padding:0 0 10px;border-bottom:1px solid var(--line)}
 .clist{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:16px;overscroll-behavior:contain}
 .cmt{display:flex;gap:10px;align-items:flex-start}
 .cmt.rep{margin-left:44px}
@@ -329,3 +328,6 @@ button.opt.res{width:100%;text-align:left}
 .mlist{border-top:1px solid var(--line);background:#fff;padding:4px 10px}
 .mlist[hidden]{display:none}
 .mrow{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;text-align:left;font-weight:600;font-size:15px}
+
+body.noscroll{overflow:hidden}
+.overlay{touch-action:manipulation}

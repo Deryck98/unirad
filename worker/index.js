@@ -204,12 +204,12 @@ async function listPosts(url, env, user) {
   if (posts.length) {
     const ids = posts.map((p) => p.id);
     const cm = await env.DB.prepare(
-      `SELECT c.id, c.post_id, c.user_id, c.anon, c.author_name, c.text, c.created_at, c.parent_id,
+      `SELECT c.id, c.post_id, c.user_id, c.anon, c.author_name, c.text, c.created_at, c.parent_id, (SELECT avatar FROM users u WHERE u.id = c.user_id) AS avatar,
         (SELECT COUNT(*) FROM comment_likes l WHERE l.comment_id = c.id) AS likes,
         EXISTS(SELECT 1 FROM comment_likes l WHERE l.comment_id = c.id AND l.user_id = ?) AS liked
        FROM comments c WHERE c.post_id IN (${ids.map(() => '?').join(',')}) ORDER BY c.created_at ASC`
     ).bind(user.id, ...ids).all();
-    for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at, mine: c.user_id === user.id, parent: c.parent_id || null, likes: c.likes, liked: !!c.liked });
+    for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at, mine: c.user_id === user.id, parent: c.parent_id || null, avatar: c.anon ? null : (c.avatar || null), likes: c.likes, liked: !!c.liked });
     const pollIds = posts.filter((p) => p.poll).map((p) => p.id);
     if (pollIds.length) {
       const q = pollIds.map(() => '?').join(',');
