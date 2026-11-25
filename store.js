@@ -47,6 +47,7 @@ const api = {
   addComment(id, text, anon) { return call('POST', `/posts/${id}/comments`, { text, anon }); },
   report(id) { return call('POST', `/posts/${id}/report`); },
   deletePost(id) { return call('DELETE', `/posts/${id}`); },
+  editPost(id, text) { return call('PATCH', `/posts/${id}`, { text }); },
   addDelay(d) { return call('POST', '/delays', d); }
 };
 
@@ -85,6 +86,7 @@ const demo = {
   async addComment(id, text, anon) { L.addComment(id, text, anon ? 'Profissional anônimo' : L.user.name); },
   async report(id) { L.report(id); },
   async deletePost() {},
+  async editPost() {},
   async addDelay(d) { (d.items || []).forEach((it) => L.addDelay({ region: L.user.region, hospital: d.hospital, type: d.type, month: it.month, days: it.days, anon: true })); }
 };
 

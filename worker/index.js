@@ -409,6 +409,15 @@ export default {
           await env.DB.prepare('UPDATE users SET avatar = ? WHERE id = ?').bind(nk || null, user.id).run();
           if (old && old !== nk) await dropImage(env, old);
         }
+        if ('name' in b) {
+          const nm = str(b.name, 40);
+          if (nm.length < 2) throw bad('Digite um nome com pelo menos 2 letras.');
+          await env.DB.batch([
+            env.DB.prepare('UPDATE users SET name = ? WHERE id = ?').bind(nm, user.id),
+            env.DB.prepare('UPDATE posts SET author_name = ? WHERE user_id = ?').bind(nm, user.id),
+            env.DB.prepare('UPDATE comments SET author_name = ? WHERE user_id = ?').bind(nm, user.id),
+          ]);
+        }
         if ('bio' in b || 'trainings' in b || 'experience' in b) {
           await env.DB.prepare('UPDATE users SET bio = ?, trainings = ?, experience = ? WHERE id = ?')
             .bind(str(b.bio, 160), str(b.trainings, 500), str(b.experience, 500), user.id).run();
@@ -435,6 +444,14 @@ export default {
       if (pm) {
         const [, id, action] = pm;
         if (!action && m === 'DELETE') return await deletePost(env, user, id);
+        if (!action && m === 'PATCH') {
+          const b = await readJson(req);
+          const text = str(b.text, 800);
+          if (text.length < 3) throw bad('Escreva algo na publicação.');
+          const r = await env.DB.prepare('UPDATE posts SET text = ? WHERE id = ? AND user_id = ?').bind(text, id, user.id).run();
+          if (!r.meta.changes) throw new HttpError(404, 'Publicação não encontrada.');
+          return json({ ok: true });
+        }
         if (action === 'like' && m === 'POST') return await toggleLike(env, user, id);
         if (action === 'comments' && m === 'POST') return await addComment(req, env, user, id);
         if (action === 'report' && m === 'POST') return await reportPost(env, user, id);

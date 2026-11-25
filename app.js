@@ -4,7 +4,7 @@ import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 let Store = null;
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, editPost: null, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -39,6 +39,8 @@ const ICONS = {
   share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   poll: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  up: '<polyline points="18 15 12 9 6 15"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'
 };
 const ic = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
@@ -86,7 +88,7 @@ function postCard(p) {
         <div class="pwho"><span class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}</span>
           <span class="muted small"> · ${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</span>
           ${p.sample ? '<span class="tag">exemplo</span>' : ''}${p.mine && isAnon(p.author) ? '<span class="tag you">só você sabe</span>' : ''}</div>
-        ${p.mine ? `<button class="more" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button>` : `<button class="more" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 16)}</button>`}
+        ${p.mine ? `<span class="mine-btns">${Store.mode === 'api' ? `<button class="more" data-action="edit-post" data-id="${p.id}" aria-label="Editar minha publicação">${ic('edit', 17)}</button>` : ''}<button class="more" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button></span>` : `<button class="more" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 16)}</button>`}
       </div>
       ${p.cat !== 'geral' ? `<span class="chip c-${p.cat}">${CATS[p.cat]}</span>` : ''}
       <p class="body">${esc(p.text).replace(/\n/g, '<br>')}</p>
@@ -189,6 +191,7 @@ function screenSignup() {
     <p class="muted">Passo 1 de 2 · seus dados de acesso</p>
     <form data-form="signup1" novalidate>
       <label>Nome completo <i class="req">*</i><input name="name" autocomplete="name" required minlength="5" placeholder="Seu nome" value="${esc(sd.name || '')}"></label>
+      <p class="muted small" style="margin-top:-4px">Depois você escolhe como seu nome aparece no app (só o primeiro nome, apelido…) em Perfil.</p>
       <label>E-mail <i class="req">*</i><input name="email" type="email" autocomplete="email" required placeholder="voce@email.com" value="${esc(sd.email || '')}"></label>
       ${pw('password', 'Senha', 'Mínimo 6 caracteres', 'new-password', sd.password || '')}
       ${pw('password2', 'Confirmar senha', 'Repita a senha', 'new-password', sd.password || '')}
@@ -288,6 +291,8 @@ function screenProfile() {
     </div>
     <form class="card" data-form="profile" novalidate>
       <b>Sobre você</b>
+      <label>Nome que aparece no app <i class="req">*</i><input name="dname" maxlength="40" required placeholder="Ex.: Deryck Bento" value="${esc(u.name)}"></label>
+      <p class="muted small" style="margin-top:-4px">Pode ser só o primeiro nome, um apelido ou como preferir. Troca também nas suas publicações antigas (as anônimas continuam anônimas).</p>
       <p class="muted small">Tudo opcional. Só aparece para os outros membros quando você posta sem anonimato e alguém toca no seu nome. Seu CRTR, e-mail e senha nunca aparecem.</p>
       <label>Apresentação<input name="bio" maxlength="160" placeholder="Ex.: Técnico em radiologia há 8 anos, em Manaus" value="${esc(u.bio || '')}"></label>
       <label>Capacitações<textarea name="trainings" rows="3" maxlength="500" placeholder="Cursos e treinamentos (tomografia, ressonância, radioproteção…)">${esc(u.trainings || '')}</textarea></label>
@@ -352,7 +357,7 @@ function modalPost() {
       <span class="anontxt"><b>Publicar como anônimo</b><span class="muted small" id="anonHint"></span></span></label>
     <p class="muted small">Não publique dados de pacientes ou exames. Em prints, cubra nomes, CPF e dados pessoais antes de enviar.</p>
     <div class="error" id="formError" role="alert"></div>
-    <button class="btn big" type="submit">Publicar</button></form>`);
+    <div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" type="submit">Publicar</button></div></form>`);
 }
 
 function modalInstall() {
@@ -406,7 +411,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'edit' && ui.editPost ? sheet('Editar publicação', `<form data-form="edit" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="6" maxlength="800" required>${esc(ui.editPost.text)}</textarea></label><p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p><div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -575,6 +580,8 @@ document.addEventListener('click', async (ev) => {
     if (a === 'new-delay') return openModal('delay');
     if (a === 'new-post') { ui.postCat = 'geral'; ui.photoBlob = null; return openModal('post'); }
     if (a === 'new-poll') { ui.postCat = 'enquete'; ui.photoBlob = null; return openModal('post'); }
+    if (a === 'edit-post') { ui.editPost = (ui.posts || []).find((x) => x.id === el.dataset.id); if (ui.editPost) openModal('edit'); return; }
+    if (a === 'to-top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (a === 'new-photo') { ui.postCat = 'geral'; ui.photoBlob = null; openModal('post'); const pi = document.getElementById('photoIn'); if (pi) pi.click(); return; }
     if (a === 'pick-photo') { document.getElementById('photoIn').click(); return; }
     if (a === 'rm-photo') { ui.photoBlob = null; document.getElementById('photoPrev').hidden = true; document.getElementById('photoBtn').hidden = false; return; }
@@ -686,11 +693,20 @@ document.addEventListener('submit', async (ev) => {
       return refresh();
     }
     if (kind === 'profile') {
-      const p = { bio: String(d.get('bio') || '').trim(), trainings: String(d.get('trainings') || '').trim(), experience: String(d.get('experience') || '').trim() };
+      const dn = String(d.get('dname') || '').trim().replace(/\s+/g, ' ');
+      if (dn.length < 2) return err('Digite o nome que vai aparecer (mínimo 2 letras).');
+      const p = { name: dn, bio: String(d.get('bio') || '').trim(), trainings: String(d.get('trainings') || '').trim(), experience: String(d.get('experience') || '').trim() };
       busy(f, true);
       try { await Store.saveProfile(p); } finally { busy(f, false); }
       Object.assign(ui.user, p); toast('Perfil salvo.');
-      return;
+      return refresh({ quiet: true });
+    }
+    if (kind === 'edit') {
+      const t = String(d.get('text') || '').trim();
+      if (t.length < 3) return err('Escreva algo na publicação.');
+      busy(f, true);
+      try { await Store.editPost(f.dataset.id, t); } finally { busy(f, false); }
+      closeModal(); toast('Publicação editada.'); return refresh({ quiet: true });
     }
     if (kind === 'comment') {
       const t = String(d.get('t') || '').trim(); if (!t) return;
@@ -731,4 +747,14 @@ function showSplash() {
   Store = await connect();
   try { ui.user = await Store.init(); } catch { ui.user = null; }
   if (ui.user) await refresh(); else render();
+})();
+
+/* botão flutuante: voltar ao topo */
+(() => {
+  const b = document.createElement('button');
+  b.className = 'totop'; b.setAttribute('data-action', 'to-top'); b.setAttribute('aria-label', 'Voltar ao topo'); b.hidden = true;
+  b.innerHTML = ic('up', 22) + '<span>Topo</span>';
+  document.body.appendChild(b);
+  let on = false;
+  window.addEventListener('scroll', () => { const v = window.scrollY > 700 && !!ui.user; if (v !== on) { on = v; b.hidden = !v; } }, { passive: true });
 })();
