@@ -1622,9 +1622,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; render(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 function showSplash() {
-  let seen = false;
-  try { seen = !!localStorage.getItem('unirad_seen'); localStorage.setItem('unirad_seen', '1'); } catch { /* sem armazenamento */ }
-  const reduce = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || seen;
+  const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const el = document.createElement('div');
   el.className = 'splash';
   el.innerHTML = emblem({ size: 300, text: true, anim: !reduce }) + '<div class="sname">UniRad</div><div class="stag">' + CONFIG.tagline + '</div>';
