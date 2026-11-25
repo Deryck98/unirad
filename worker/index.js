@@ -377,7 +377,7 @@ async function createDelay(req, env, user) {
   const raw = Array.isArray(b.items) ? b.items : [{ month: b.month, days: b.days }];
   if (!hospital) throw bad('Informe o hospital ou a clínica.');
   if (!DELAY_TYPES.includes(type)) throw bad('Escolha o que aconteceu.');
-  if (!raw.length || raw.length > 12) throw bad('Marque de 1 a 12 meses.');
+  if (!raw.length || raw.length > 36) throw bad('Marque de 1 a 36 meses.');
   const seen = new Set();
   const items = raw.map((it) => ({ month: str(it && it.month, 7), days: Math.max(0, Math.min(31, Math.round(Number(it && it.days) || 0))) }));
   for (const it of items) {

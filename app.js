@@ -4,7 +4,7 @@ import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 let Store = null;
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, editPost: null, menu: null, cpost: null, cAnon: false, replyTo: null, rep: {}, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, dsel: {}, dy: new Date().getFullYear(), editPost: null, menu: null, cpost: null, cAnon: false, replyTo: null, rep: {}, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -389,19 +389,40 @@ function modalUser() {
     ${u.bio || u.trainings || u.experience ? '' : '<p class="muted">Esse profissional ainda não preencheu o perfil.</p>'}`);
 }
 
+const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+function delayCalHtml() {
+  const now = new Date(), cy = now.getFullYear(), cm = now.getMonth();
+  const y = ui.dy;
+  const grid = MESES_CURTO.map((l, i) => {
+    const key = `${y}-${String(i + 1).padStart(2, '0')}`;
+    const future = y > cy || (y === cy && i > cm);
+    const on = key in ui.dsel;
+    return `<button type="button" class="mcell ${on ? 'on' : ''}" data-action="toggle-month" data-m="${key}" ${future ? 'disabled' : ''} aria-pressed="${on}">${l}</button>`;
+  }).join('');
+  const keys = Object.keys(ui.dsel).sort().reverse();
+  const rows = keys.map((k) => { const [yy, mm] = k.split('-'); const lbl = `${MESES_CURTO[Number(mm) - 1]}/${yy}`; return `<div class="drow" data-m="${k}"><span>${lbl}</span><input type="number" min="0" max="31" inputmode="numeric" placeholder="dias de atraso" value="${ui.dsel[k] || ''}" aria-label="Dias de atraso em ${lbl}"></div>`; }).join('');
+  return { grid, rows, y, canNext: y < cy };
+}
 function modalDelay() {
-  const d = new Date();
-  const months = [];
-  for (let i = 0; i < 6; i++) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); months.push({ v: `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`, l: `${MES[x.getMonth()]}/${x.getFullYear()}` }); }
+  const c = delayCalHtml();
   return sheet('Relatar atraso', `<form data-form="delay" novalidate>
     <label>Hospital ou clínica <i class="req">*</i><input name="hospital" required maxlength="80" placeholder="Nome do local"></label>
     <label>O que aconteceu <i class="req">*</i><select name="type">${DELAY_TYPES.map((t) => `<option>${esc(t)}</option>`).join('')}</select></label>
-    <div class="field">Meses em atraso <i class="req">*</i> <span class="muted small">(toque para marcar)</span>
-      <div class="mchips">${months.map((m) => `<button type="button" class="mchip" data-action="toggle-month" data-m="${m.v}">${m.l}</button>`).join('')}</div></div>
-    ${months.map((m) => `<div class="drow" data-m="${m.v}" hidden><span>${m.l}</span><input type="number" min="0" max="31" inputmode="numeric" placeholder="dias de atraso" aria-label="Dias de atraso em ${m.l}"></div>`).join('')}
+    <div class="field">Meses em atraso <i class="req">*</i> <span class="muted small">(toque nos meses e depois informe os dias)</span>
+      <div class="yearbar"><button type="button" data-action="dyear" data-d="-1" aria-label="Ano anterior">${ic('chev', 20)}</button><b id="dyear">${c.y}</b><button type="button" data-action="dyear" data-d="1" id="dnext" aria-label="Próximo ano" ${c.canNext ? '' : 'disabled'}>${ic('chev', 20)}</button></div>
+      <div class="mgrid" id="mgrid">${c.grid}</div></div>
+    <div id="drows">${c.rows}</div>
     <p class="muted small">Seu relato aparece só somado aos outros, sem seu nome. Relate só fatos e nada de dados de pacientes.</p>
     <div class="error" id="formError" role="alert"></div>
-    <button class="btn big" type="submit">Enviar relato</button></form>`);
+    <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" type="submit">Enviar relato</button></div></form>`);
+}
+function updateDelayCal() {
+  const c = delayCalHtml();
+  const g = document.getElementById('mgrid'); if (!g) return;
+  g.innerHTML = c.grid; document.getElementById('dyear').textContent = c.y; document.getElementById('dnext').disabled = !c.canNext;
+  const r = document.getElementById('drows'), keep = r.querySelector('input:focus');
+  r.innerHTML = c.rows;
+  if (keep) { /* mantém o foco no campo ativo quando possível */ }
 }
 
 function modalPost() {
@@ -643,11 +664,13 @@ document.addEventListener('click', async (ev) => {
       return openModal('install');
     }
     if (a === 'toggle-month') {
-      el.classList.toggle('on');
-      const row = document.querySelector(`.drow[data-m="${el.dataset.m}"]`);
-      if (row) { row.hidden = !el.classList.contains('on'); if (!row.hidden) row.querySelector('input').focus(); }
+      const k = el.dataset.m;
+      if (k in ui.dsel) delete ui.dsel[k]; else ui.dsel[k] = 0;
+      updateDelayCal();
+      if (k in ui.dsel) { const inp = document.querySelector(`.drow[data-m="${k}"] input`); if (inp) inp.focus(); }
       return;
     }
+    if (a === 'dyear') { ui.dy = Math.min(new Date().getFullYear(), ui.dy + Number(el.dataset.d)); if (ui.dy < 2000) ui.dy = 2000; updateDelayCal(); return; }
     if (a === 'vote') {
       const p = (ui.posts || []).find((x) => x.id === el.dataset.id); const i = Number(el.dataset.i);
       if (p && p.poll) {
@@ -687,7 +710,7 @@ document.addEventListener('click', async (ev) => {
     }
     if (a === 'view') { ui.view = el.dataset.v; return refresh(); }
     if (a === 'cat') { ui.cat = el.dataset.c; return refresh({ quiet: true }); }
-    if (a === 'new-delay') return openModal('delay');
+    if (a === 'new-delay') { ui.dsel = {}; ui.dy = new Date().getFullYear(); return openModal('delay'); }
     if (a === 'new-post') { ui.postCat = 'geral'; ui.photoBlob = null; return openModal('post'); }
     if (a === 'new-poll') { ui.postCat = 'enquete'; ui.photoBlob = null; return openModal('post'); }
     if (a === 'edit-profile') return openModal('editprofile');
@@ -812,7 +835,7 @@ document.addEventListener('submit', async (ev) => {
     if (kind === 'delay') {
       const hospital = String(d.get('hospital') || '').trim();
       if (!hospital) return err('Informe o hospital ou a clínica.');
-      const items = [...f.querySelectorAll('.mchip.on')].map((c) => ({ month: c.dataset.m, days: Math.max(0, Math.min(31, Number(f.querySelector(`.drow[data-m="${c.dataset.m}"] input`).value) || 0)) }));
+      const items = Object.entries(ui.dsel).map(([month, days]) => ({ month, days: Math.max(0, Math.min(31, Number(days) || 0)) }));
       if (!items.length) return err('Marque pelo menos um mês em atraso.');
       busy(f, true);
       try { await Store.addDelay({ hospital, type: String(d.get('type')), items }); }
@@ -954,3 +977,8 @@ window.addEventListener('scroll', () => {
     reset();
   });
 })();
+
+document.addEventListener('input', (ev) => {
+  const row = ev.target.closest && ev.target.closest('.drow');
+  if (row && ev.target.tagName === 'INPUT') ui.dsel[row.dataset.m] = Math.max(0, Math.min(31, Number(ev.target.value) || 0));
+});

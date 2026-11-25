@@ -397,3 +397,16 @@ input.sw:checked::after{transform:translateX(18px)}
 .clike{min-width:44px}
 .composer .ghost{min-width:44px;min-height:44px}
 .avedit::after{content:"";position:absolute;inset:-6px}
+
+.yearbar{display:flex;align-items:center;justify-content:center;gap:18px;margin:10px 0 8px}
+.yearbar b{font-size:18px;min-width:56px;text-align:center}
+.yearbar button{width:44px;height:44px;border-radius:50%;border:1px solid #cfd7e4;background:#fff;display:flex;align-items:center;justify-content:center;color:var(--navy)}
+.yearbar button:first-child svg{transform:rotate(180deg)}
+.yearbar button:disabled{opacity:.35}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mcell{min-height:52px;border-radius:12px;border:1px solid #cfd7e4;background:#fff;font-weight:600;font-size:15px;color:var(--text)}
+.mcell.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.mcell:disabled{opacity:.35}
+#drows{margin-top:6px}
+.stickybtns .btn{width:auto;white-space:nowrap;flex:2}
+.stickybtns .btn.out{flex:1}
