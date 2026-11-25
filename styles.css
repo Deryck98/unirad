@@ -193,3 +193,8 @@ body.dark-welcome{background:var(--navy)}
 .linkname:active{text-decoration:underline}
 .ublk{margin:10px 0}.ublk p{margin:2px 0 0}
 form.card{margin:12px 0}
+.anonbox{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid #cfd7e4;border-radius:12px;background:#f7f9fc;margin:12px 0;font-weight:400}
+.anonbox input{width:22px;height:22px;margin-top:2px;flex:none}
+.anontxt{display:flex;flex-direction:column;gap:2px}.anontxt b{font-weight:700;font-size:15px}
+.check.mini{margin:6px 0 0;font-size:13px;font-weight:500}
+.tag.you{background:#e3f6ea;color:#14633a}

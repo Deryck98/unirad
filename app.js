@@ -4,7 +4,7 @@ import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 let Store = null;
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: true, viewUser: null, signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -81,7 +81,7 @@ function postCard(p) {
   return `<article class="card post">
     <div class="row gap8 head">
       ${avatar(p.author)}
-      <div class="grow"><div class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}${p.sample ? ' <span class="tag">exemplo</span>' : ''}</div>
+      <div class="grow"><div class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}${p.sample ? ' <span class="tag">exemplo</span>' : ''}${p.mine && isAnon(p.author) ? ' <span class="tag you">só você sabe</span>' : ''}</div>
         <div class="muted small">${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</div></div>
       <span class="chip c-${p.cat}">${CATS[p.cat]}</span>
     </div>
@@ -96,7 +96,8 @@ function postCard(p) {
       ${p.mine ? `<button class="act mini" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button>` : `<button class="act mini" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 18)}</button>`}
     </div>
     ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm">${avatar(c.author)}<div class="bubble"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div></div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
-      <form class="row gap8" data-form="comment" data-id="${p.id}"><input name="t" maxlength="300" placeholder="Escreva um comentário" required autocomplete="off"><button class="btn small" type="submit">Enviar</button></form></div>` : ''}
+      <form data-form="comment" data-id="${p.id}"><div class="row gap8"><input name="t" maxlength="300" placeholder="Escreva um comentário" required autocomplete="off"><button class="btn small" type="submit">Enviar</button></div>
+        <label class="check mini"><input type="checkbox" name="anon" ${ui.user.anon ? 'checked' : ''}><span>Comentar como anônimo</span></label></form></div>` : ''}
   </article>`;
 }
 
@@ -117,7 +118,8 @@ const TERMS = `<ul class="rules">
   <li><b>Nada de dados de pacientes:</b> não publique nomes, exames, laudos ou imagens. Isso é sigilo profissional e é protegido pela LGPD.</li>
   <li><b>Relate fatos, sem ofensa:</b> diga o que aconteceu (ex.: "salário de outubro atrasado"). Não xingue nem acuse sem prova.</li>
   <li><b>Documentos:</b> se mostrar contracheque ou comprovante, cubra dados que não sejam seus.</li>
-  <li><b>Seu número do CRTR, e-mail e senha</b> ficam em sigilo e não aparecem para ninguém. Em posts anônimos, nem o seu nome aparece.</li>
+  <li><b>Seu número do CRTR, e-mail e senha</b> ficam em sigilo e não aparecem para ninguém. Em posts anônimos, nem o seu nome aparece para os colegas.</li>
+  <li><b>Anonimato entre os membros:</b> o sistema guarda internamente quem escreveu, só para conter abusos e permitir que você apague o que postou. Isso não é mostrado a ninguém na rede.</li>
   <li>Posts denunciados por várias pessoas são ocultados.</li>
   <li>Você pode apagar sua conta e seus dados quando quiser, no Perfil.</li>
   <li>O UniRad é um espaço de união da categoria e não substitui orientação de advogado ou do CRTR.</li></ul>`;
@@ -201,7 +203,7 @@ function screenSignup() {
         <div class="picked" id="picked">${pickedHtml()}</div>
         <div class="reglist short" id="reglist">${regionListHtml()}</div>
       </div>
-      <label class="check"><input type="checkbox" name="anon" ${ui.anonDefault ? 'checked' : ''}><span>Postar como anônimo por padrão <span class="muted small">(você escolhe em cada post)</span></span></label>
+      <p class="muted small">Seu perfil é visível para os colegas. Em cada post ou comentário você escolhe se quer publicar de forma anônima.</p>
       <label class="check"><input type="checkbox" name="terms" required><span>Li e aceito as <a href="#" data-action="show-terms">regras do UniRad</a> <i class="req">*</i></span></label>
       <div class="error" id="formError" role="alert"></div>
       <button class="btn big" type="submit">Criar cadastro</button>
@@ -268,7 +270,7 @@ function screenProfile() {
     <div class="card"><div class="row gap8"><div class="avatar ini big">${esc(initials(u.name))}</div>
       <div><div class="name">${esc(u.name)}</div><div class="muted small">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div></div></div>
       ${u.bio ? `<p class="body">${esc(u.bio)}</p>` : ''}
-      <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Postar como anônimo por padrão</span></label>
+      <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Começar os posts como anônimo <span class="muted small">(você ainda escolhe em cada post)</span></span></label>
     </div>
     <form class="card" data-form="profile" novalidate>
       <b>Sobre você</b>
@@ -329,7 +331,8 @@ function modalPost() {
       ${[1, 2, 3, 4].map((n) => `<label>Opção ${n}${n < 3 ? ' <i class="req">*</i>' : ' <span class="muted small">(opcional)</span>'}<input name="poll${n}" maxlength="40" placeholder="Resposta ${n}"></label>`).join('')}
     </div>
     <label>Onde aparece<select name="scope"><option value="regiao">Só na minha região</option><option value="brasil">Brasil todo</option></select></label>
-    <label class="check"><input type="checkbox" name="anon" ${ui.user.anon ? 'checked' : ''}><span>Publicar como anônimo</span></label>
+    <label class="anonbox"><input type="checkbox" name="anon" id="anonChk" ${ui.user.anon ? 'checked' : ''}>
+      <span class="anontxt"><b>Publicar como anônimo</b><span class="muted small" id="anonHint"></span></span></label>
     <p class="muted small">Não publique dados de pacientes, exames ou imagens.</p>
     <div class="error" id="formError" role="alert"></div>
     <button class="btn big" type="submit">Publicar</button></form>`);
@@ -415,6 +418,11 @@ function bindSignup() {
   }
 }
 function bindModal() {
+  const ac = document.getElementById('anonChk');
+  if (ac) {
+    const hint = () => { document.getElementById('anonHint').textContent = ac.checked ? 'Aparece como "Profissional anônimo". Os colegas não saberão que foi você.' : `Aparece com seu nome: ${ui.user.name}`; };
+    ac.addEventListener('change', hint); hint();
+  }
   const c = document.getElementById('catSel');
   if (c) c.addEventListener('change', () => {
     document.getElementById('vagaExtra').hidden = c.value !== 'vagas';
@@ -577,7 +585,7 @@ document.addEventListener('submit', async (ev) => {
     }
     if (kind === 'comment') {
       const t = String(d.get('t') || '').trim(); if (!t) return;
-      await Store.addComment(f.dataset.id, t, ui.user.anon);
+      await Store.addComment(f.dataset.id, t, !!d.get('anon'));
       return refresh({ quiet: true });
     }
     if (kind === 'delete') {
