@@ -331,3 +331,9 @@ button.opt.res{width:100%;text-align:left}
 
 body.noscroll{overflow:hidden}
 .overlay{touch-action:manipulation}
+
+.overlay{background:rgba(4,10,28,.72)}
+.sheet{border:1px solid #b9c4d8;border-bottom:0;box-shadow:0 -8px 28px rgba(0,0,0,.35)}
+.csheet{height:88%}
+.csheet .grab i{background:#9aa7bf}
+.ctitle{border-bottom:1px solid #cfd7e6}
