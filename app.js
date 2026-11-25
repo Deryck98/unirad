@@ -59,6 +59,7 @@ function viewSwitch() {
   </div>`;
 }
 
+const INVITE = () => `Estou no UniRad, a rede dos técnicos e tecnólogos em radiologia, por piso, jornada e salário em dia. Entre com seu CRTR: ${location.origin}`;
 const initials = (n) => String(n).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 const isAnon = (n) => n === 'Profissional anônimo';
 const avatar = (n) => (isAnon(n) ? `<div class="avatar">${ic('user', 18)}</div>` : `<div class="avatar ini">${esc(initials(n))}</div>`);
@@ -222,7 +223,7 @@ function screenHome() {
       <div class="small">Profissionais unidos · ${esc(viewName(ui.view))}</div>
       <div class="big-n">${members.toLocaleString('pt-BR')}</div>
       ${showBar ? `<div class="small">Próxima meta do Brasil: ${meta.toLocaleString('pt-BR')} (${national.toLocaleString('pt-BR')} hoje)</div>
-      <div class="bar"><i style="width:${pct}%"></i></div>` : `<div class="small">Cada cadastro fortalece a categoria. Convide seus colegas.</div>`}
+      <div class="bar"><i style="width:${pct}%"></i></div>` : `<div class="small">Cada cadastro fortalece a categoria. <a href="#" data-action="invite" style="color:#fff;font-weight:700">Convide seus colegas</a>.</div>`}
     </section>
     <h3 class="sec">Mural de atrasos</h3>
     <div class="grid2">
@@ -270,6 +271,12 @@ function screenProfile() {
       <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Postar como anônimo por padrão</span></label>
     </div>
     <p class="muted small">Seu número do CRTR, e-mail e senha não aparecem para ninguém.</p>
+    <div class="card invite"><b>Convide seus colegas</b>
+      <p class="muted small">Quanto mais gente, mais força. Mande seu convite:</p>
+      <a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(INVITE())}">Convidar pelo WhatsApp</a>
+      <button class="btn out" data-action="invite">${ic('share', 18)} Compartilhar link</button>
+      <button class="btn out" data-action="copy-link">Copiar link</button>
+    </div>
     ${installBtn()}
     <button class="btn out" data-action="show-terms">Ver regras do UniRad</button>
     <button class="btn out" data-action="logout">Sair</button>
@@ -433,6 +440,13 @@ document.addEventListener('click', async (ev) => {
       return;
     }
     if (a === 'vote') { await Store.vote(el.dataset.id, Number(el.dataset.i)); return refresh({ quiet: true }); }
+    if (a === 'copy-link') { try { await navigator.clipboard.writeText(location.origin); toast('Link copiado.'); } catch { toast(location.origin); } return; }
+    if (a === 'invite') {
+      ev.preventDefault();
+      if (navigator.share) { try { await navigator.share({ title: 'UniRad', text: INVITE() }); } catch { /* cancelado */ } return; }
+      try { await navigator.clipboard.writeText(INVITE()); toast('Convite copiado. Cole no WhatsApp.'); } catch { toast(location.origin); }
+      return;
+    }
     if (a === 'share') {
       const data = { title: 'UniRad', text: 'UniRad: a força da radiologia unida. Entre com seu CRTR.', url: location.origin };
       if (navigator.share) { try { await navigator.share(data); } catch { /* cancelado */ } return; }
