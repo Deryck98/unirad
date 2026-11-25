@@ -4,7 +4,7 @@ import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 let Store = null;
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, editPost: null, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, editPost: null, menu: null, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -40,6 +40,8 @@ const ICONS = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   poll: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   up: '<polyline points="18 15 12 9 6 15"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  dots: '<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'
 };
@@ -88,7 +90,7 @@ function postCard(p) {
         <div class="pwho"><span class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}</span>
           <span class="muted small"> · ${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</span>
           ${p.sample ? '<span class="tag">exemplo</span>' : ''}${p.mine && isAnon(p.author) ? '<span class="tag you">só você sabe</span>' : ''}</div>
-        ${p.mine ? `<span class="mine-btns">${Store.mode === 'api' ? `<button class="more" data-action="edit-post" data-id="${p.id}" aria-label="Editar minha publicação">${ic('edit', 17)}</button>` : ''}<button class="more" data-action="delete-post" data-id="${p.id}" aria-label="Apagar minha publicação">${ic('x', 18)}</button></span>` : `<button class="more" data-action="report" data-id="${p.id}" aria-label="Denunciar">${ic('flag', 16)}</button>`}
+        <button class="more" data-action="menu-post" data-id="${p.id}" aria-label="Mais opções">${ic('dots', 20)}</button>
       </div>
       ${p.cat !== 'geral' ? `<span class="chip c-${p.cat}">${CATS[p.cat]}</span>` : ''}
       <p class="body">${esc(p.text).replace(/\n/g, '<br>')}</p>
@@ -100,11 +102,20 @@ function postCard(p) {
         <button class="act" data-action="toggle-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 20)}<span>${p.comments.length || ''}</span></button>
         <button class="act" data-action="share" data-id="${p.id}" aria-label="Compartilhar">${ic('share', 20)}</button>
       </div>
-      ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm">${avatar(c.author, null, 'sm')}<div class="bubble"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div></div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
+      ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm">${avatar(c.author, null, 'sm')}<div class="bubble"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div>${c.mine ? `<button class="more cmore" data-action="menu-comment" data-pid="${p.id}" data-id="${c.id}" aria-label="Opções do comentário">${ic('dots', 18)}</button>` : ''}</div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
         <form data-form="comment" data-id="${p.id}"><div class="row gap8"><input name="t" maxlength="300" placeholder="Escreva um comentário" required autocomplete="off"><button class="btn small" type="submit">Enviar</button></div>
           <label class="check mini"><input type="checkbox" name="anon" ${ui.user.anon ? 'checked' : ''}><span>Comentar como anônimo</span></label></form></div>` : ''}
     </div>
   </article>`;
+}
+
+function menuSheet() {
+  const m = ui.menu;
+  const it = (act, icon, label, cls = '') => `<button class="mi ${cls}" data-action="${act}">${ic(icon, 22)}<span>${label}</span></button>`;
+  const items = m.mine
+    ? (Store.mode === 'api' ? it('menu-edit', 'edit', 'Editar') : '') + it('menu-delete', 'trash', 'Apagar', 'danger')
+    : it('menu-report', 'flag', 'Denunciar', 'danger');
+  return `<div class="overlay" data-action="close-modal"><div class="sheet msheet" role="dialog" aria-label="Opções" data-stop="1" id="msheet"><div class="grab" id="grab"><i></i></div>${items}<button class="mi cancel" data-action="close-modal"><span>Cancelar</span></button></div></div>`;
 }
 
 function composer() {
@@ -411,7 +422,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'edit' && ui.editPost ? sheet('Editar publicação', `<form data-form="edit" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="6" maxlength="800" required>${esc(ui.editPost.text)}</textarea></label><p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p><div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -483,7 +494,20 @@ function showPhotoPrev() {
   img.src = URL.createObjectURL(ui.photoBlob);
   document.getElementById('photoPrev').hidden = false; document.getElementById('photoBtn').hidden = true;
 }
+function bindMenuSwipe() {
+  const g = document.getElementById('grab'), s = document.getElementById('msheet');
+  if (!g || !s) return;
+  let y0 = null, dy = 0;
+  const end = () => {
+    if (y0 === null) return; const d = dy; y0 = null; s.style.transition = 'transform .2s'; 
+    if (d > 70) { s.style.transform = 'translateY(100%)'; setTimeout(closeModal, 150); } else s.style.transform = '';
+  };
+  s.addEventListener('pointerdown', (e) => { if (e.target.closest('.mi') && !e.target.closest('#grab')) return; y0 = e.clientY; dy = 0; s.style.transition = 'none'; try { s.setPointerCapture(e.pointerId); } catch { /* ok */ } });
+  s.addEventListener('pointermove', (e) => { if (y0 === null) return; dy = e.clientY - y0; s.style.transform = `translateY(${dy > 0 ? dy : dy / 4}px)`; });
+  s.addEventListener('pointerup', end); s.addEventListener('pointercancel', end);
+}
 function bindModal() {
+  bindMenuSwipe();
   const pin = document.getElementById('photoIn');
   if (pin) {
     pin.addEventListener('change', async () => {
@@ -580,8 +604,15 @@ document.addEventListener('click', async (ev) => {
     if (a === 'new-delay') return openModal('delay');
     if (a === 'new-post') { ui.postCat = 'geral'; ui.photoBlob = null; return openModal('post'); }
     if (a === 'new-poll') { ui.postCat = 'enquete'; ui.photoBlob = null; return openModal('post'); }
-    if (a === 'edit-post') { ui.editPost = (ui.posts || []).find((x) => x.id === el.dataset.id); if (ui.editPost) openModal('edit'); return; }
-    if (a === 'to-top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (a === 'menu-post') { const p = (ui.posts || []).find((x) => x.id === el.dataset.id); if (p) { ui.menu = { kind: 'post', id: p.id, mine: !!p.mine, text: p.text }; openModal('menu'); } return; }
+    if (a === 'menu-comment') { const p = (ui.posts || []).find((x) => x.id === el.dataset.pid); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (c) { ui.menu = { kind: 'comment', id: c.id, mine: true, text: c.text }; openModal('menu'); } return; }
+    if (a === 'menu-edit') { const m = ui.menu; ui.editPost = { type: m.kind, id: m.id, text: m.text }; ui.modal = 'edit'; return render(); }
+    if (a === 'menu-report') { const m = ui.menu; closeModal(); if (confirm('Denunciar esta publicação por ofensa ou dados de paciente?')) { await Store.report(m.id); toast('Denúncia enviada. Obrigado.'); refresh({ quiet: true }); } return; }
+    if (a === 'menu-delete') {
+      const m = ui.menu; closeModal();
+      if (confirm(m.kind === 'comment' ? 'Apagar seu comentário?' : 'Apagar sua publicação?')) { await (m.kind === 'comment' ? Store.deleteComment(m.id) : Store.deletePost(m.id)); refresh({ quiet: true }); }
+      return;
+    }
     if (a === 'new-photo') { ui.postCat = 'geral'; ui.photoBlob = null; openModal('post'); const pi = document.getElementById('photoIn'); if (pi) pi.click(); return; }
     if (a === 'pick-photo') { document.getElementById('photoIn').click(); return; }
     if (a === 'rm-photo') { ui.photoBlob = null; document.getElementById('photoPrev').hidden = true; document.getElementById('photoBtn').hidden = false; return; }
@@ -705,8 +736,8 @@ document.addEventListener('submit', async (ev) => {
       const t = String(d.get('text') || '').trim();
       if (t.length < 3) return err('Escreva algo na publicação.');
       busy(f, true);
-      try { await Store.editPost(f.dataset.id, t); } finally { busy(f, false); }
-      closeModal(); toast('Publicação editada.'); return refresh({ quiet: true });
+      try { await (f.dataset.type === 'comment' ? Store.editComment(f.dataset.id, t) : Store.editPost(f.dataset.id, t)); } finally { busy(f, false); }
+      closeModal(); toast('Editado.'); return refresh({ quiet: true });
     }
     if (kind === 'comment') {
       const t = String(d.get('t') || '').trim(); if (!t) return;
@@ -747,14 +778,4 @@ function showSplash() {
   Store = await connect();
   try { ui.user = await Store.init(); } catch { ui.user = null; }
   if (ui.user) await refresh(); else render();
-})();
-
-/* botão flutuante: voltar ao topo */
-(() => {
-  const b = document.createElement('button');
-  b.className = 'totop'; b.setAttribute('data-action', 'to-top'); b.setAttribute('aria-label', 'Voltar ao topo'); b.hidden = true;
-  b.innerHTML = ic('up', 22) + '<span>Topo</span>';
-  document.body.appendChild(b);
-  let on = false;
-  window.addEventListener('scroll', () => { const v = window.scrollY > 700 && !!ui.user; if (v !== on) { on = v; b.hidden = !v; } }, { passive: true });
 })();

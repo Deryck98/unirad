@@ -203,9 +203,9 @@ async function listPosts(url, env, user) {
   if (posts.length) {
     const ids = posts.map((p) => p.id);
     const cm = await env.DB.prepare(
-      `SELECT id, post_id, anon, author_name, text, created_at FROM comments WHERE post_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at ASC`
+      `SELECT id, post_id, user_id, anon, author_name, text, created_at FROM comments WHERE post_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at ASC`
     ).bind(...ids).all();
-    for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at });
+    for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at, mine: c.user_id === user.id });
     const pollIds = posts.filter((p) => p.poll).map((p) => p.id);
     if (pollIds.length) {
       const q = pollIds.map(() => '?').join(',');
@@ -440,6 +440,19 @@ export default {
         return json({ user: { name: u.name, role: u.role, region: u.region, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '' } });
       }
 
+      const cmm = p.match(/^\/api\/comments\/([0-9a-f-]{36})$/);
+      if (cmm && m === 'PATCH') {
+        const text = str((await readJson(req)).text, 300);
+        if (!text) throw bad('Escreva um comentário.');
+        const r = await env.DB.prepare('UPDATE comments SET text = ? WHERE id = ? AND user_id = ?').bind(text, cmm[1], user.id).run();
+        if (!r.meta.changes) throw new HttpError(404, 'Comentário não encontrado.');
+        return json({ ok: true });
+      }
+      if (cmm && m === 'DELETE') {
+        const r = await env.DB.prepare('DELETE FROM comments WHERE id = ? AND user_id = ?').bind(cmm[1], user.id).run();
+        if (!r.meta.changes) throw new HttpError(404, 'Comentário não encontrado.');
+        return json({ ok: true });
+      }
       const pm = p.match(/^\/api\/posts\/([0-9a-f-]{36})(?:\/(like|comments|report|vote))?$/);
       if (pm) {
         const [, id, action] = pm;

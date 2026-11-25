@@ -47,6 +47,8 @@ const api = {
   addComment(id, text, anon) { return call('POST', `/posts/${id}/comments`, { text, anon }); },
   report(id) { return call('POST', `/posts/${id}/report`); },
   deletePost(id) { return call('DELETE', `/posts/${id}`); },
+  editComment(id, text) { return call('PATCH', `/comments/${id}`, { text }); },
+  deleteComment(id) { return call('DELETE', `/comments/${id}`); },
   editPost(id, text) { return call('PATCH', `/posts/${id}`, { text }); },
   addDelay(d) { return call('POST', '/delays', d); }
 };
@@ -87,6 +89,8 @@ const demo = {
   async report(id) { L.report(id); },
   async deletePost() {},
   async editPost() {},
+  async editComment() {},
+  async deleteComment() {},
   async addDelay(d) { (d.items || []).forEach((it) => L.addDelay({ region: L.user.region, hospital: d.hospital, type: d.type, month: it.month, days: it.days, anon: true })); }
 };
 
