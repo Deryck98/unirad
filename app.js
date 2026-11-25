@@ -398,6 +398,15 @@ function ring(v, size = 48) {
   const c = 2 * Math.PI * 19, pct = v == null ? 0 : Math.max(0.05, v / 5), cls = scoreCls(v);
   return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 48 48" role="img" aria-label="${v == null ? 'Sem nota ainda' : 'Nota ' + String(v).replace('.', ',')}"><circle cx="24" cy="24" r="19" fill="none" stroke="#e7ecf4" stroke-width="5"/><circle cx="24" cy="24" r="19" fill="none" stroke="${RING[cls]}" stroke-width="5" stroke-dasharray="${(c * pct).toFixed(1)} ${c.toFixed(1)}" stroke-linecap="round" transform="rotate(-90 24 24)"/><text x="24" y="29" text-anchor="middle" font-size="${v == null ? 16 : 14}" font-weight="600" fill="#0b1f3a">${v == null ? '–' : String(v).replace('.', ',')}</text></svg>`;
 }
+const THEME_KEY = 'unirad-tema';
+const getTheme = () => { try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch { return 'auto'; } };
+function applyTheme() {
+  const t = getTheme(), dark = t === 'escuro' || (t === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', dark ? '#0a0f1a' : '#0b1f3a');
+}
+applyTheme();
+if (window.matchMedia) { const mq = window.matchMedia('(prefers-color-scheme: dark)'); (mq.addEventListener ? mq.addEventListener.bind(mq, 'change') : mq.addListener.bind(mq))(() => { if (getTheme() === 'auto') applyTheme(); }); }
 const normQ = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 function entityCard(kind, e) {
   const alert = e.crit ? `<span class="ptag bad">${e.crit} ${e.crit === 1 ? 'alerta' : 'alertas'}</span>` : e.geral != null ? '<span class="ptag good">Sem alertas</span>' : '<span class="ptag">Poucas respostas</span>';
@@ -619,6 +628,7 @@ function screenProfile() {
       <div class="prow"><button class="btn out" data-action="edit-profile">Editar perfil</button><button class="btn out" data-action="invite">Convidar</button></div>
     </section>
     <div class="list">
+      <div class="lrow themerow"><span>Aparência</span><div class="segtabs" role="group" aria-label="Aparência">${[['claro', 'Claro'], ['escuro', 'Escuro'], ['auto', 'Automático']].map(([v, l]) => `<button type="button" class="${getTheme() === v ? 'on' : ''}" data-action="theme" data-v="${v}">${l}</button>`).join('')}</div></div>
       <label class="lrow"><span>Começar posts como anônimo</span><input type="checkbox" class="sw" data-action="toggle-anon" ${u.anon ? 'checked' : ''}></label>
       ${api ? `<label class="lrow"><span>Perfil privado<small class="muted">Só quem você aprovar vê sua bio e publicações.</small></span><input type="checkbox" class="sw" data-action="toggle-private" ${u.private ? 'checked' : ''}></label>
       ${api && u.admin ? `<button class="lrow" data-action="open-announce"><span>Publicar aviso do UniRad</span>${ic('chev', 18)}</button>` : ''}
@@ -1014,6 +1024,7 @@ document.addEventListener('click', async (ev) => {
       if (ui.tab === 'inicio' && ui.view === 'seguindo') refresh({ quiet: true });
       return;
     }
+    if (a === 'theme') { try { localStorage.setItem(THEME_KEY, el.dataset.v); } catch { /* ignorado */ } applyTheme(); return render(); }
     if (a === 'asort') { ui.asort = el.dataset.v; return render(); }
     if (a === 'atab') { ui.atab = el.dataset.v; return render(); }
     if (a === 'asub') { ui.asub = el.dataset.v; return render(); }
