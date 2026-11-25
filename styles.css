@@ -189,3 +189,7 @@ body.dark-welcome{background:var(--navy)}
 .composer .fake{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .invite{padding:14px}.invite p{margin:2px 0 8px}
 .btn.wa{background:#1fa855;color:#fff;text-decoration:none}
+.linkname{font:inherit;font-weight:600;color:inherit;padding:0;text-align:left}
+.linkname:active{text-decoration:underline}
+.ublk{margin:10px 0}.ublk p{margin:2px 0 0}
+form.card{margin:12px 0}

@@ -29,6 +29,8 @@ const api = {
   async logout() { await call('POST', '/logout'); },
   async deleteAccount(password) { await call('DELETE', '/me', { password }); },
   async setAnon(anon) { await call('PATCH', '/me', { anon }); },
+  saveProfile(p) { return call('PATCH', '/me', p); },
+  async getUser(id) { return (await call('GET', '/users/' + id)).user; },
   stats(scope) { return call('GET', '/stats?scope=' + encodeURIComponent(scope)); },
   posts({ scope, cat, before }) { return call('GET', `/posts?scope=${encodeURIComponent(scope)}&cat=${cat || 'tudo'}${before ? '&before=' + before : ''}`); },
   vote(id, opt) { return call('POST', `/posts/${id}/vote`, { opt }); },
@@ -43,12 +45,14 @@ const api = {
 /* ---- modo demonstração (localStorage) com a mesma interface ---- */
 const demo = {
   mode: 'demo',
-  async init() { const u = L.user; return u ? { id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon } : null; },
+  async init() { const u = L.user; return u ? { id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '' } : null; },
   async signup(d) { const u = L.signup({ name: d.name, crtr: d.crtr, role: d.role, region: d.region, anon: d.anon }); return { id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon }; },
   async login() { throw new ApiError('No modo demonstração não há login. Crie um cadastro.'); },
   async logout() { L.reset(); L.logout(); },
   async deleteAccount() { L.reset(); L.logout(); },
   async setAnon(anon) { L.updateUser({ anon }); },
+  async saveProfile(p) { L.updateUser(p); },
+  async getUser() { return null; },
   async stats(scope) {
     const s = scope === 'brasil' ? 'brasil' : Number(scope);
     const delays = L.delays(s);

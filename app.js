@@ -4,7 +4,7 @@ import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 let Store = null;
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: true, signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: true, viewUser: null, signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -81,7 +81,7 @@ function postCard(p) {
   return `<article class="card post">
     <div class="row gap8 head">
       ${avatar(p.author)}
-      <div class="grow"><div class="name">${esc(p.author)}${p.sample ? ' <span class="tag">exemplo</span>' : ''}</div>
+      <div class="grow"><div class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}${p.sample ? ' <span class="tag">exemplo</span>' : ''}</div>
         <div class="muted small">${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</div></div>
       <span class="chip c-${p.cat}">${CATS[p.cat]}</span>
     </div>
@@ -265,12 +265,20 @@ function screenRights() {
 function screenProfile() {
   const u = ui.user;
   return `<main class="pad"><h2>Perfil</h2>
-    <div class="card"><div class="row gap8"><div class="avatar big">${ic('user', 26)}</div>
-      <div><div class="name">${esc(u.name)}</div><div class="muted small">${esc(u.role)}</div></div></div>
-      <div class="row between li"><span class="muted">Região</span><b>${esc(regionLabel(u.region))}</b></div>
+    <div class="card"><div class="row gap8"><div class="avatar ini big">${esc(initials(u.name))}</div>
+      <div><div class="name">${esc(u.name)}</div><div class="muted small">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div></div></div>
+      ${u.bio ? `<p class="body">${esc(u.bio)}</p>` : ''}
       <label class="check"><input type="checkbox" data-action="toggle-anon" ${u.anon ? 'checked' : ''}><span>Postar como anônimo por padrão</span></label>
     </div>
-    <p class="muted small">Seu número do CRTR, e-mail e senha não aparecem para ninguém.</p>
+    <form class="card" data-form="profile" novalidate>
+      <b>Sobre você</b>
+      <p class="muted small">Tudo opcional. Só aparece para os outros membros quando você posta sem anonimato e alguém toca no seu nome. Seu CRTR, e-mail e senha nunca aparecem.</p>
+      <label>Apresentação<input name="bio" maxlength="160" placeholder="Ex.: Técnico em radiologia há 8 anos, em Manaus" value="${esc(u.bio || '')}"></label>
+      <label>Capacitações<textarea name="trainings" rows="3" maxlength="500" placeholder="Cursos e treinamentos (tomografia, ressonância, radioproteção…)">${esc(u.trainings || '')}</textarea></label>
+      <label>Experiências<textarea name="experience" rows="3" maxlength="500" placeholder="Onde já atuou e em quais áreas">${esc(u.experience || '')}</textarea></label>
+      <div class="error" id="formError" role="alert"></div>
+      <button class="btn" type="submit">Salvar perfil</button>
+    </form>
     <div class="card invite"><b>Convide seus colegas</b>
       <p class="muted small">Quanto mais gente, mais força. Mande seu convite:</p>
       <a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(INVITE())}">Convidar pelo WhatsApp</a>
@@ -285,7 +293,14 @@ function screenProfile() {
   </main>`;
 }
 
-const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+function modalUser() {
+  const u = ui.viewUser;
+  const blk = (t, v) => (v ? `<div class="ublk"><b>${t}</b><p>${esc(v).replace(/\n/g, '<br>')}</p></div>` : '');
+  return sheet(u.name, `<div class="muted small" style="margin:-6px 0 10px">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>
+    ${blk('Apresentação', u.bio)}${blk('Capacitações', u.trainings)}${blk('Experiências', u.experience)}
+    ${u.bio || u.trainings || u.experience ? '' : '<p class="muted">Esse profissional ainda não preencheu o perfil.</p>'}`);
+}
+
 function modalDelay() {
   const d = new Date();
   const months = [];
@@ -352,7 +367,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, comunidade: screenFeed, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -422,6 +437,7 @@ document.addEventListener('click', async (ev) => {
       ui.modal = null; return render();
     }
     if (a === 'show-terms') { ev.preventDefault(); if (!ui.user) { document.getElementById('modalRoot').innerHTML = sheet('Regras do UniRad', TERMS); return; } ui.modal = 'terms'; return render(); }
+    if (a === 'view-user') { const u = await Store.getUser(el.dataset.id); if (u) { ui.viewUser = u; ui.modal = 'user'; render(); } return; }
     if (a === 'toggle-pw') {
       const inp = el.parentElement.querySelector('input'); const show = inp.type === 'password';
       inp.type = show ? 'text' : 'password'; el.innerHTML = ic(show ? 'eyeoff' : 'eye', 22); el.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha'); return;
@@ -551,6 +567,13 @@ document.addEventListener('submit', async (ev) => {
       } finally { busy(f, false); }
       ui.modal = null; ui.tab = 'comunidade'; ui.cat = 'tudo';
       return refresh();
+    }
+    if (kind === 'profile') {
+      const p = { bio: String(d.get('bio') || '').trim(), trainings: String(d.get('trainings') || '').trim(), experience: String(d.get('experience') || '').trim() };
+      busy(f, true);
+      try { await Store.saveProfile(p); } finally { busy(f, false); }
+      Object.assign(ui.user, p); toast('Perfil salvo.');
+      return;
     }
     if (kind === 'comment') {
       const t = String(d.get('t') || '').trim(); if (!t) return;

@@ -57,11 +57,11 @@ async function currentUser(req, env) {
   const token = getCookie(req, 'unirad_session');
   if (!token) return null;
   const row = await env.DB.prepare(
-    'SELECT u.id, u.name, u.role, u.region, u.anon_default FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
+    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
   ).bind(await sha256(token), Date.now()).first();
   return row || null;
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '' });
 
 async function readJson(req) {
   const ct = req.headers.get('content-type') || '';
@@ -113,7 +113,7 @@ async function signup(req, env) {
   const user = await currentUserById(env, id);
   return json({ user: publicUser(user) }, 201, { 'set-cookie': sessionCookie(token, SESSION_DAYS * 86400) });
 }
-const currentUserById = (env, id) => env.DB.prepare('SELECT id, name, role, region, anon_default FROM users WHERE id = ?').bind(id).first();
+const currentUserById = (env, id) => env.DB.prepare('SELECT id, name, role, region, anon_default, bio, trainings, experience FROM users WHERE id = ?').bind(id).first();
 
 async function login(req, env) {
   const b = await readJson(req);
@@ -218,7 +218,7 @@ async function listPosts(url, env, user) {
   return json({
     posts: posts.map((p) => ({
       id: p.id, cat: p.cat, scope: p.scope, region: p.region,
-      author: p.anon ? 'Profissional anônimo' : p.author_name,
+      author: p.anon ? 'Profissional anônimo' : p.author_name, authorId: p.anon ? null : p.user_id,
       text: p.text, place: p.place || '', salary: p.salary || '', t: p.created_at,
       likes: p.likes, liked: !!p.liked, mine: p.user_id === user.id, comments: byId.get(p.id) || [], poll: p.pollOut || null
     })),
@@ -350,7 +350,11 @@ export default {
 
       if (p === '/api/me' && m === 'PATCH') {
         const b = await readJson(req);
-        await env.DB.prepare('UPDATE users SET anon_default = ? WHERE id = ?').bind(b.anon === false ? 0 : 1, user.id).run();
+        if (typeof b.anon === 'boolean') await env.DB.prepare('UPDATE users SET anon_default = ? WHERE id = ?').bind(b.anon ? 1 : 0, user.id).run();
+        if ('bio' in b || 'trainings' in b || 'experience' in b) {
+          await env.DB.prepare('UPDATE users SET bio = ?, trainings = ?, experience = ? WHERE id = ?')
+            .bind(str(b.bio, 160), str(b.trainings, 500), str(b.experience, 500), user.id).run();
+        }
         return json({ ok: true });
       }
       if (p === '/api/me' && m === 'DELETE') return await deleteAccount(req, env, user);
@@ -358,6 +362,13 @@ export default {
       if (p === '/api/posts' && m === 'GET') return await listPosts(url, env, user);
       if (p === '/api/posts' && m === 'POST') return await createPost(req, env, user);
       if (p === '/api/delays' && m === 'POST') return await createDelay(req, env, user);
+
+      const um = p.match(/^\/api\/users\/([0-9a-f-]{36})$/);
+      if (um && m === 'GET') {
+        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience FROM users WHERE id = ?').bind(um[1]).first();
+        if (!u) throw new HttpError(404, 'Perfil não encontrado.');
+        return json({ user: { name: u.name, role: u.role, region: u.region, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '' } });
+      }
 
       const pm = p.match(/^\/api\/posts\/([0-9a-f-]{36})(?:\/(like|comments|report|vote))?$/);
       if (pm) {
