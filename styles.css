@@ -595,3 +595,7 @@ button{-webkit-tap-highlight-color:transparent}
 .unioncard.elec{margin-top:10px}
 .ubar{height:10px;border-radius:5px;background:#f2e3b3;overflow:hidden;margin:6px 0 8px}
 .ubar i{display:block;height:100%;background:#f5b301;border-radius:5px;transition:width .3s}
+.unioncard.how{margin-top:10px}
+.steps4{list-style:none;margin:10px 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.steps4 li{display:flex;gap:10px;font-size:14px;line-height:1.45}
+.steps4 li>span{flex:none;width:26px;height:26px;border-radius:50%;background:#f5b301;color:#0b1f3a;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}

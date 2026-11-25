@@ -580,6 +580,16 @@ function screenRights() {
       <div class="ubar" role="progressbar" aria-valuemin="0" aria-valuemax="${unionGoal(ui.union.count)}" aria-valuenow="${ui.union.count}"><i style="width:${Math.max(2, Math.min(100, Math.round((ui.union.count / unionGoal(ui.union.count)) * 100)))}%"></i></div>
       <p class="small">${ui.union.mine ? 'Seu apoio já conta.' : 'Seu apoio conta.'} Ninguém vê seu nome.</p>
       <button class="btn ${ui.union.mine ? 'out' : 'gold'}" data-action="union">${ui.union.mine ? 'Apoiando (tocar para retirar)' : 'Quero apoiar'}</button></div>` : ''}
+    <div class="unioncard how"><b>Como criar um sindicato</b>
+      <p>Hoje não há sindicato da radiologia no Amazonas. Estes são os passos, resumidos:</p>
+      <ol class="steps4">
+        <li><span>1</span><div><b>Reunir a categoria.</b> Quanto mais gente apoiar, mais força. O contador acima ajuda.</div></li>
+        <li><span>2</span><div><b>Assembleia de fundação.</b> Com aviso público no Diário Oficial da União e em jornal.</div></li>
+        <li><span>3</span><div><b>Estatuto em cartório.</b> Define a categoria e a região de forma clara e é aprovado na assembleia.</div></li>
+        <li><span>4</span><div><b>Registro no Ministério do Trabalho.</b> Só depois o sindicato representa a categoria e negocia piso.</div></li>
+      </ol>
+      <p class="small">Informativo geral, não é aconselhamento jurídico. O trâmite precisa de advogado trabalhista.</p>
+      <a class="btn out" target="_blank" rel="noopener noreferrer" href="https://www.gov.br/trabalho-e-emprego/pt-br/servicos/sindicatos/cadastro-de-entidades/PORTARIAMTEN3.472de2023Consolidada.pdf" style="text-align:center;text-decoration:none">Ver regras no Ministério do Trabalho</a></div>
   </main>`;
 }
 
