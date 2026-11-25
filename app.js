@@ -33,6 +33,8 @@ const ICONS = {
   search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
   book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'
 };
 const ic = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
@@ -114,7 +116,7 @@ function screenLogin() {
     <h2>Entrar</h2>
     <form data-form="login" novalidate>
       <label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
-      <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
+      <label>Senha<span class="pwbox"><input name="password" type="password" autocomplete="current-password" required><button type="button" class="eye" data-action="toggle-pw" aria-label="Mostrar senha">${ic('eye', 22)}</button></span></label>
       <div class="error" id="formError" role="alert"></div>
       <button class="btn big" type="submit">Entrar</button>
     </form>
@@ -136,11 +138,12 @@ function screenSignup() {
     <form data-form="signup" novalidate>
       <label>Nome completo <i class="req">*</i><input name="name" autocomplete="name" required minlength="5" placeholder="Seu nome"></label>
       <label>E-mail <i class="req">*</i><input name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
-      <label>Senha <i class="req">*</i><input name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="Mínimo 6 caracteres"></label>
+      <label>Senha <i class="req">*</i><span class="pwbox"><input name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="Mínimo 6 caracteres"><button type="button" class="eye" data-action="toggle-pw" aria-label="Mostrar senha">${ic('eye', 22)}</button></span></label>
+      <label>Confirmar senha <i class="req">*</i><span class="pwbox"><input name="password2" type="password" autocomplete="new-password" required minlength="6" placeholder="Repita a senha"><button type="button" class="eye" data-action="toggle-pw" aria-label="Mostrar senha">${ic('eye', 22)}</button></span></label>
       <label>Função <i class="req">*</i>
         <select name="role" id="roleSel" required><option value="">Selecione</option><option>Técnico em Radiologia</option><option>Tecnólogo em Radiologia</option></select></label>
       <div class="field">Número do CRTR <i class="req">*</i>
-        <div class="crtrbox"><input name="crtr" id="crtrIn" inputmode="numeric" autocomplete="off" required maxlength="6" placeholder="00000" style="width:5ch" aria-label="Número do CRTR, só os números"><span id="crtrLetter">T</span></div>
+        <div class="crtrbox"><input name="crtr" id="crtrIn" inputmode="numeric" autocomplete="off" required maxlength="6" placeholder="00000" style="width:calc(5ch + 16px)" aria-label="Número do CRTR, só os números"><span id="crtrLetter">T</span></div>
         <div class="muted small">Digite só os números. A letra (T para técnico, N para tecnólogo) entra sozinha.</div></div>
       <div class="field">Região do seu CRTR <i class="req">*</i>
         <div class="search">${ic('search', 18)}<input id="regionSearch" value="${esc(ui.regionQuery)}" placeholder="Busque: 19, Amazonas, Pará…" autocomplete="off"></div>
@@ -253,7 +256,7 @@ function modalPost() {
 function modalDeleteAccount() {
   return sheet('Apagar minha conta', `<form data-form="delete" novalidate>
     <p>Isso apaga sua conta, suas publicações, comentários e relatos. Não dá para desfazer.</p>
-    ${Store.mode === 'api' ? '<label>Digite sua senha<input name="password" type="password" autocomplete="current-password" required></label>' : ''}
+    ${Store.mode === 'api' ? `<label>Digite sua senha<span class="pwbox"><input name="password" type="password" autocomplete="current-password" required><button type="button" class="eye" data-action="toggle-pw" aria-label="Mostrar senha">${ic('eye', 22)}</button></span></label>` : ''}
     <div class="error" id="formError" role="alert"></div>
     <button class="btn big danger" type="submit">Apagar tudo</button></form>`);
 }
@@ -318,7 +321,7 @@ function bindSignup() {
   if (s) s.addEventListener('input', (e) => { ui.regionQuery = e.target.value; document.getElementById('reglist').innerHTML = regionListHtml(); });
   const c = document.getElementById('crtrIn'), r = document.getElementById('roleSel'), l = document.getElementById('crtrLetter');
   if (c && r && l) {
-    const sync = () => { c.value = c.value.replace(/\D/g, '').slice(0, 6); c.style.width = Math.max(5, c.value.length) + 'ch'; l.textContent = r.value.startsWith('Tecnólogo') ? 'N' : 'T'; };
+    const sync = () => { c.value = c.value.replace(/\D/g, '').slice(0, 6); const n = Math.max(5, c.value.length); c.style.width = `calc(${n}ch + ${n * 2}px + 6px)`; l.textContent = r.value.startsWith('Tecnólogo') ? 'N' : 'T'; };
     c.addEventListener('input', sync); r.addEventListener('change', sync); sync();
   }
 }
@@ -341,6 +344,10 @@ document.addEventListener('click', async (ev) => {
       ui.modal = null; return render();
     }
     if (a === 'show-terms') { ev.preventDefault(); if (!ui.user) { document.getElementById('modalRoot').innerHTML = sheet('Regras do UniRad', TERMS); return; } ui.modal = 'terms'; return render(); }
+    if (a === 'toggle-pw') {
+      const inp = el.parentElement.querySelector('input'); const show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password'; el.innerHTML = ic(show ? 'eyeoff' : 'eye', 22); el.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha'); return;
+    }
     if (a === 'go-signup') { ui.screen = 'signup'; return render(); }
     if (a === 'go-login') { ui.screen = 'login'; return render(); }
     if (a === 'go-welcome') { ui.screen = 'welcome'; return render(); }
@@ -388,6 +395,7 @@ document.addEventListener('submit', async (ev) => {
       if (name.length < 5) return err('Digite seu nome completo.');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return err('Digite um e-mail válido.');
       if (password.length < 6) return err('A senha precisa ter pelo menos 6 caracteres.');
+      if (password !== String(d.get('password2') || '')) return err('As senhas não são iguais. Digite de novo.');
       if (digits.length < 3 || digits.length > 6) return err('Digite o número do CRTR (só os números).');
       if (!d.get('role')) return err('Escolha sua função.');
       if (!ui.regionPick) return err('Escolha a região do seu CRTR.');

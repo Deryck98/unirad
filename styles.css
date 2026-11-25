@@ -140,3 +140,8 @@ body.dark-welcome{background:var(--navy)}
 .welcome .muted{color:#b8c4d9}
 .welcome .points li{color:#fff}.welcome .points svg{color:#4ade80}
 .welcome .btn.out{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45)}
+.pwbox{position:relative;display:block}
+.pwbox input{padding-right:52px!important}
+.pwbox .eye{position:absolute;right:4px;bottom:0;height:48px;width:48px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.crtrbox input{min-width:0!important;overflow:visible;text-overflow:clip;flex:none}
+.crtrbox input::placeholder{color:#b4bccb}
