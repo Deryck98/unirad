@@ -593,3 +593,5 @@ button{-webkit-tap-highlight-color:transparent}
 .dcard{border:1px solid #e1e7f2;border-radius:14px;padding:12px;margin-bottom:10px;background:#fff}
 .dcard p{margin:4px 0 10px;font-size:15px;line-height:1.45;color:var(--navy)}
 .unioncard.elec{margin-top:10px}
+.ubar{height:10px;border-radius:5px;background:#f2e3b3;overflow:hidden;margin:6px 0 8px}
+.ubar i{display:block;height:100%;background:#f5b301;border-radius:5px;transition:width .3s}

@@ -512,6 +512,7 @@ const councilSub = (c) => (c.id === 'conter' ? 'Conselho Nacional' : 'Conselho d
 function councilCard(c) {
   return `<button class="ecard" data-action="open-council" data-id="${c.id}"><span class="sgl av${c.id === 'conter' ? 0 : 2}">${c.id === 'conter' ? 'CT' : 'CR'}</span><span class="einfo"><b>${esc(councilName(c))}</b><span class="muted small">${councilSub(c)} · ${c.raters} ${c.raters === 1 ? 'avaliação' : 'avaliações'}</span>${c.crit ? `<span class="ptag bad">${c.crit} ${c.crit === 1 ? 'alerta' : 'alertas'}</span>` : c.geral != null ? '<span class="ptag good">Sem alertas</span>' : '<span class="ptag">Poucas respostas</span>'}</span>${ring(c.geral)}</button>`;
 }
+const unionGoal = (n) => [100, 500, 1000, 5000, 10000].find((g) => n < g) || 10000;
 function conselhoSection() {
   if (Store.mode !== 'api' || !ui.councils) return '';
   return `<h3 class="usec">Conselho: cobrar quem fiscaliza</h3>
@@ -575,7 +576,9 @@ function screenRights() {
     <div class="list"><a class="lrow" target="_blank" rel="noopener" href="https://www.conter.gov.br"><span>CONTER e CRTRs<br><span class="muted small">No site do CONTER você encontra o CRTR da sua região.</span></span>${ic('chev', 18)}</a></div>
     ${conselhoSection()}
     ${Store.mode === 'api' && ui.union ? `<div class="unioncard"><b>Um sindicato para a nossa categoria</b>
-      <p>${ui.union.count >= 10 ? `${ui.union.count} profissionais já apoiam. ` : 'Seja um dos primeiros a apoiar. '}Seu apoio conta e ninguém vê seu nome.</p>
+      <p><b>${ui.union.count}</b> ${ui.union.count === 1 ? 'profissional apoia' : 'profissionais apoiam'} · meta ${unionGoal(ui.union.count)}</p>
+      <div class="ubar" role="progressbar" aria-valuemin="0" aria-valuemax="${unionGoal(ui.union.count)}" aria-valuenow="${ui.union.count}"><i style="width:${Math.max(2, Math.min(100, Math.round((ui.union.count / unionGoal(ui.union.count)) * 100)))}%"></i></div>
+      <p class="small">${ui.union.mine ? 'Seu apoio já conta.' : 'Seu apoio conta.'} Ninguém vê seu nome.</p>
       <button class="btn ${ui.union.mine ? 'out' : 'gold'}" data-action="union">${ui.union.mine ? 'Apoiando (tocar para retirar)' : 'Quero apoiar'}</button></div>` : ''}
   </main>`;
 }
