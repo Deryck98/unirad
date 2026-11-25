@@ -19,6 +19,7 @@ const ago = (t) => {
 };
 const logo = (s = 36) => emblem({ size: s, text: false });
 const ICONS = {
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
@@ -382,6 +383,8 @@ function screenProfile() {
     </section>
     <div class="list">
       <label class="lrow"><span>Começar posts como anônimo</span><input type="checkbox" class="sw" data-action="toggle-anon" ${u.anon ? 'checked' : ''}></label>
+      ${api ? `<label class="lrow"><span>Perfil privado<small class="muted">Só quem você aprovar vê sua bio e publicações.</small></span><input type="checkbox" class="sw" data-action="toggle-private" ${u.private ? 'checked' : ''}></label>
+      <button class="lrow" data-action="open-followers"><span>Seguidores e pedidos${u.pending ? `<b class="badge">${u.pending}</b>` : ''}</span>${ic('chev', 18)}</button>` : ''}
       <a class="lrow" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(INVITE())}"><span>Convidar pelo WhatsApp</span>${ic('chev', 18)}</a>
       ${row('copy-link', 'Copiar link de convite')}
       ${standalone() ? '' : row('install', 'Instalar app')}
@@ -393,23 +396,43 @@ function screenProfile() {
   </main>`;
 }
 
+function followBtn(u) {
+  if (u.me) return '<div class="muted small">Este é o seu perfil.</div>';
+  const label = u.state === 'ok' ? 'Seguindo' : u.state === 'pending' ? 'Pedido enviado' : u.private ? 'Pedir para seguir' : 'Seguir';
+  return `<button class="btn ${u.state === 'none' ? '' : 'out'}" id="ufollow" data-action="follow" data-id="${u.id}">${label}</button>`;
+}
 function modalUser() {
   const u = ui.viewUser;
   const blk = (t, v) => (v ? `<div class="ublk"><b>${t}</b><p>${esc(v).replace(/\n/g, '<br>')}</p></div>` : '');
   const big = u.avatar ? `<button class="pav" data-action="zoom" data-src="${esc(imgUrl(u.avatar))}" aria-label="Ampliar foto">${avatar(u.name, u.avatar, 'huge')}</button>` : avatar(u.name, '', 'huge');
+  const who = `<div class="muted small">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>`;
+  if (u.restricted) {
+    return sheet(u.name, `<div class="uhero">${big}${who}
+      <div class="ulock">${ic('lock', 18)} Este perfil é privado. ${u.state === 'pending' ? 'Seu pedido está esperando resposta.' : 'Peça para seguir para ver as publicações.'}</div>
+      ${followBtn(u)}</div>`);
+  }
   const has = u.bio || u.trainings || u.experience;
   const list = ui.userPosts === null ? '<p class="muted small">Carregando…</p>' : ui.userPosts.length
     ? ui.userPosts.map((p) => `<div class="upost"><div class="muted small">${esc(CAT_NAME[p.cat] || 'Publicação')} · ${ago(p.t)}</div><div>${esc(p.text).slice(0, 220)}${p.text.length > 220 ? '…' : ''}</div></div>`).join('')
     : '<p class="muted small">Nenhuma publicação aberta ainda.</p>';
-  return sheet(u.name, `<div class="uhero">${big}
-    <div class="muted small">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>
+  return sheet(u.name, `<div class="uhero">${big}${who}
     ${u.bio ? `<div class="ubio">${esc(u.bio)}</div>` : ''}
     <div class="ustats"><div><b>${u.posts}</b><span>posts</span></div><div><b id="ufollowers">${u.followers}</b><span>seguidores</span></div><div><b>${u.following}</b><span>seguindo</span></div></div>
-    ${u.me ? '<div class="muted small">Este é o seu perfil.</div>' : `<button class="btn ${u.followed ? 'out' : ''}" id="ufollow" data-action="follow" data-id="${u.id}" aria-pressed="${u.followed}">${u.followed ? 'Seguindo' : 'Seguir'}</button>`}
+    ${followBtn(u)}
   </div>
   ${u.trainings || u.experience ? `<details class="udet"><summary>Ver capacitações e experiências</summary>${blk('Capacitações', u.trainings)}${blk('Experiências', u.experience)}</details>` : ''}
   ${has ? '' : '<p class="muted small center">Esse profissional ainda não preencheu o perfil.</p>'}
   <h4 class="usec">Publicações</h4><div id="uposts">${list}</div>`);
+}
+
+function modalFollowers() {
+  const d = ui.fol;
+  const row = (r, btns) => `<div class="frow">${avatar(r.name, r.avatar, 'sm')}<button class="fname" data-action="view-user" data-id="${r.id}">${esc(r.name)}</button>${btns}</div>`;
+  if (!d) return sheet('Seguidores e pedidos', '<p class="muted small">Carregando…</p>');
+  return sheet('Seguidores e pedidos', `<h4 class="usec">Pedidos (${d.requests.length})</h4>
+    ${d.requests.map((r) => row(r, `<button class="btn sm" data-action="req" data-act="approve" data-id="${r.id}">Aprovar</button><button class="btn out sm" data-action="req" data-act="decline" data-id="${r.id}">Recusar</button>`)).join('') || '<p class="muted small">Nenhum pedido no momento.</p>'}
+    <h4 class="usec">Seguidores (${d.followers.length})</h4>
+    ${d.followers.map((r) => row(r, `<button class="btn out sm" data-action="req" data-act="remove" data-id="${r.id}">Remover</button>`)).join('') || '<p class="muted small">Ninguém segue você ainda.</p>'}`);
 }
 
 const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -526,7 +549,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -674,22 +697,39 @@ document.addEventListener('click', async (ev) => {
       if (!ui.user) { closeRootModal(); return; }
       return closeModal();
     }
-    if (a === 'zoom-profile') { const id = el.dataset.id; ui.zoomUid = null; ui.stk = ui.stk || []; const u = await Store.getUser(id); if (!u) return; ui.viewUser = u; ui.userPosts = null; ui.modal = 'user'; render(); Store.userPosts(id).then((r) => { if (ui.viewUser && ui.viewUser.id === id) { ui.userPosts = r.posts; if (ui.modal === 'user') render(); } }).catch(() => { ui.userPosts = []; }); return; }
+    if (a === 'zoom-profile') { const id = el.dataset.id; ui.zoomUid = null; ui.stk = ui.stk || []; const u = await Store.getUser(id); if (!u) return; ui.viewUser = u; ui.userPosts = null; ui.modal = 'user'; render(); if (u.restricted) return; Store.userPosts(id).then((r) => { if (ui.viewUser && ui.viewUser.id === id) { ui.userPosts = r.posts; if (ui.modal === 'user') render(); } }).catch(() => { ui.userPosts = []; }); return; }
     if (a === 'show-terms') { ev.preventDefault(); if (!ui.user) { openRootModal(sheet('Regras do UniRad', TERMS)); return; } return openModal('terms'); }
     if (a === 'view-user' || (a === 'avatar-tap' && !el.dataset.src)) {
       const id = el.dataset.id;
       const u = await Store.getUser(id); if (!u) return;
       ui.viewUser = u; ui.userPosts = null; openOver('user');
-      Store.userPosts(id).then((r) => { if (ui.viewUser && ui.viewUser.id === id) { ui.userPosts = r.posts; const box = document.getElementById('uposts'); if (box && ui.modal === 'user') render(); } }).catch(() => { ui.userPosts = []; });
+      if (u.restricted) return;
+      Store.userPosts(id).then((r) => { if (ui.viewUser && ui.viewUser.id === id) { ui.userPosts = r.posts; if (ui.modal === 'user') render(); } }).catch(() => { ui.userPosts = []; });
       return;
     }
     if (a === 'avatar-tap') { ui.zoomSrc = el.dataset.src; ui.zoomUid = el.dataset.id; return openOver('zoom'); }
     if (a === 'follow') {
       const u = ui.viewUser; if (!u || u.id !== el.dataset.id) return;
-      u.followed = !u.followed; u.followers += u.followed ? 1 : -1; render();
-      try { await Store.follow(u.id); } catch (e) { u.followed = !u.followed; u.followers += u.followed ? 1 : -1; render(); toast(e.message); return; }
+      const prev = { state: u.state, followers: u.followers };
+      const next = u.state !== 'none' ? 'none' : u.private ? 'pending' : 'ok';
+      if (prev.state === 'ok') u.followers -= 1; if (next === 'ok') u.followers += 1;
+      u.state = next; render();
+      try { await Store.follow(u.id); } catch (e) { u.state = prev.state; u.followers = prev.followers; render(); toast(e.message); return; }
       if (ui.tab === 'inicio' && ui.view === 'seguindo') refresh({ quiet: true });
       return;
+    }
+    if (a === 'open-followers') { ui.fol = null; openModal('followers'); try { ui.fol = await Store.requests(); } catch (e) { toast(e.message); } if (ui.modal === 'followers') render(); return; }
+    if (a === 'req') {
+      const id = el.dataset.id, act = el.dataset.act;
+      try { await Store.answerRequest(id, act); } catch (e) { return toast(e.message); }
+      if (ui.fol) {
+        const r = ui.fol.requests.find((x) => x.id === id);
+        ui.fol.requests = ui.fol.requests.filter((x) => x.id !== id);
+        if (act === 'approve' && r) ui.fol.followers.unshift(r);
+        if (act === 'remove') ui.fol.followers = ui.fol.followers.filter((x) => x.id !== id);
+        if (act !== 'remove') ui.user.pending = ui.fol.requests.length;
+      }
+      return render();
     }
     if (a === 'toggle-pw') {
       const inp = el.parentElement.querySelector('input'); const show = inp.type === 'password';
@@ -826,6 +866,9 @@ document.addEventListener('change', async (ev) => {
       await Store.saveProfile({ avatar: key }); ui.user.avatar = key; toast('Foto atualizada.'); render();
     } catch (e) { toast(e.message); }
     el.value = ''; return;
+  }
+  if (el.dataset.action === 'toggle-private') {
+    try { await Store.setPrivate(el.checked); ui.user.private = el.checked; if (!el.checked) ui.user.pending = 0; toast(el.checked ? 'Perfil privado ligado.' : 'Perfil público de novo.'); render(); } catch (e) { el.checked = !el.checked; toast(e.message); }
   }
   if (el.dataset.action === 'toggle-anon') {
     try { await Store.setAnon(el.checked); ui.user.anon = el.checked; } catch (e) { el.checked = !el.checked; toast(e.message); }

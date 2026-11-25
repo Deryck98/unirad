@@ -59,11 +59,11 @@ async function currentUser(req, env) {
   const token = getCookie(req, 'unirad_session');
   if (!token) return null;
   const row = await env.DB.prepare(
-    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.avatar FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
+    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.avatar, u.is_private FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
   ).bind(await sha256(token), Date.now()).first();
   return row || null;
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '' });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '', private: !!u.is_private });
 
 async function readJson(req) {
   const ct = req.headers.get('content-type') || '';
@@ -188,9 +188,14 @@ async function listPosts(url, env, user) {
   let sc;
   if (authorQ) {
     if (!/^[0-9a-f-]{36}$/.test(authorQ)) throw bad('Perfil inválido.');
+    if (authorQ !== user.id) {
+      const t = await env.DB.prepare('SELECT is_private FROM users WHERE id = ?').bind(authorQ).first();
+      if (!t) throw new HttpError(404, 'Perfil não encontrado.');
+      if (t.is_private && !(await env.DB.prepare("SELECT 1 AS x FROM follows WHERE follower_id = ? AND followee_id = ? AND status = 'ok'").bind(user.id, authorQ).first())) return json({ posts: [], more: false });
+    }
     sc = { sql: 'p.anon = 0 AND p.user_id = ?', args: [authorQ] };
   } else if (scopeQ === 'seguindo') {
-    sc = { sql: 'p.anon = 0 AND p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?)', args: [user.id] };
+    sc = { sql: 'p.anon = 0 AND p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = ? AND status = \'ok\')', args: [user.id] };
   } else sc = scopeClause(scopeQ);
   const cat = url.searchParams.get('cat') || 'tudo';
   let catSql = '';
@@ -421,17 +426,22 @@ export default {
       const user = await currentUser(req, env);
       if (p === '/api/me' && m === 'GET') {
         if (!user) return json({ user: null });
-        const [pc, lc] = await Promise.all([
+        const [pc, lc, pend] = await Promise.all([
           env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE user_id = ?').bind(user.id).first(),
           env.DB.prepare('SELECT COUNT(*) AS n FROM likes l JOIN posts p ON p.id = l.post_id WHERE p.user_id = ?').bind(user.id).first(),
+          env.DB.prepare("SELECT COUNT(*) AS n FROM follows WHERE followee_id = ? AND status = 'pending'").bind(user.id).first(),
         ]);
-        return json({ user: { ...publicUser(user), posts: pc.n, bolts: lc.n } });
+        return json({ user: { ...publicUser(user), posts: pc.n, bolts: lc.n, pending: pend.n } });
       }
       if (!user) throw new HttpError(401, 'Entre para continuar.');
 
       if (p === '/api/me' && m === 'PATCH') {
         const b = await readJson(req);
         if (typeof b.anon === 'boolean') await env.DB.prepare('UPDATE users SET anon_default = ? WHERE id = ?').bind(b.anon ? 1 : 0, user.id).run();
+        if (typeof b.private === 'boolean') {
+          await env.DB.prepare('UPDATE users SET is_private = ? WHERE id = ?').bind(b.private ? 1 : 0, user.id).run();
+          if (!b.private) await env.DB.prepare("UPDATE follows SET status = 'ok' WHERE followee_id = ? AND status = 'pending'").bind(user.id).run();
+        }
         if ('avatar' in b) {
           const old = (await env.DB.prepare('SELECT avatar FROM users WHERE id = ?').bind(user.id).first())?.avatar;
           let nk = '';
@@ -466,27 +476,43 @@ export default {
       const um = p.match(/^\/api\/users\/([0-9a-f-]{36})(\/follow)?$/);
       if (um && um[2] && m === 'POST') {
         if (um[1] === user.id) throw bad('Você não pode seguir a si mesmo.');
-        const ex = await env.DB.prepare('SELECT 1 AS x FROM users WHERE id = ?').bind(um[1]).first();
-        if (!ex) throw new HttpError(404, 'Perfil não encontrado.');
+        const t = await env.DB.prepare('SELECT is_private FROM users WHERE id = ?').bind(um[1]).first();
+        if (!t) throw new HttpError(404, 'Perfil não encontrado.');
         const del = await env.DB.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').bind(user.id, um[1]).run();
         if (!del.meta.changes) {
           const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?').bind(user.id).first()).n;
           if (n >= 2000) throw bad('Limite de perfis seguidos atingido.');
-          await env.DB.prepare('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)').bind(user.id, um[1], Date.now()).run();
+          await env.DB.prepare('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at, status) VALUES (?, ?, ?, ?)').bind(user.id, um[1], Date.now(), t.is_private ? 'pending' : 'ok').run();
         }
         return json({ ok: true });
       }
       if (um && !um[2] && m === 'GET') {
-        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, avatar FROM users WHERE id = ?').bind(um[1]).first();
+        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, avatar, is_private FROM users WHERE id = ?').bind(um[1]).first();
         if (!u) throw new HttpError(404, 'Perfil não encontrado.');
         const q = async (sql, ...a) => (await env.DB.prepare(sql).bind(...a).first()).n;
-        const [posts, followers, following, fl] = await Promise.all([
+        const me = um[1] === user.id;
+        const st = (await env.DB.prepare('SELECT status FROM follows WHERE follower_id = ? AND followee_id = ?').bind(user.id, um[1]).first())?.status || 'none';
+        const base = { id: um[1], me, name: u.name, role: u.role, region: u.region, avatar: u.avatar || '', private: !!u.is_private, state: st };
+        if (u.is_private && !me && st !== 'ok') return json({ user: { ...base, restricted: true, bio: '', trainings: '', experience: '', posts: 0, followers: 0, following: 0 } });
+        const [posts, followers, following] = await Promise.all([
           q('SELECT COUNT(*) AS n FROM posts WHERE user_id = ? AND anon = 0', um[1]),
-          q('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?', um[1]),
-          q('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?', um[1]),
-          q('SELECT COUNT(*) AS n FROM follows WHERE follower_id = ? AND followee_id = ?', user.id, um[1])
+          q("SELECT COUNT(*) AS n FROM follows WHERE followee_id = ? AND status = 'ok'", um[1]),
+          q("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ? AND status = 'ok'", um[1])
         ]);
-        return json({ user: { id: um[1], me: um[1] === user.id, name: u.name, role: u.role, region: u.region, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '', posts, followers, following, followed: fl > 0 } });
+        return json({ user: { ...base, restricted: false, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', posts, followers, following } });
+      }
+      if (p === '/api/follow-requests' && m === 'GET') {
+        const rq = await env.DB.prepare("SELECT u.id, u.name, u.avatar FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? AND f.status = 'pending' ORDER BY f.created_at DESC LIMIT 100").bind(user.id).all();
+        const fl = await env.DB.prepare("SELECT u.id, u.name, u.avatar FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? AND f.status = 'ok' ORDER BY f.created_at DESC LIMIT 200").bind(user.id).all();
+        return json({ requests: rq.results, followers: fl.results });
+      }
+      const frm = p.match(/^\/api\/follow-requests\/([0-9a-f-]{36})$/);
+      if (frm && m === 'POST') {
+        const act = (await readJson(req)).action;
+        if (act === 'approve') await env.DB.prepare("UPDATE follows SET status = 'ok' WHERE follower_id = ? AND followee_id = ? AND status = 'pending'").bind(frm[1], user.id).run();
+        else if (act === 'decline' || act === 'remove') await env.DB.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').bind(frm[1], user.id).run();
+        else throw bad('Ação inválida.');
+        return json({ ok: true });
       }
 
       const cmm = p.match(/^\/api\/comments\/([0-9a-f-]{36})$/);

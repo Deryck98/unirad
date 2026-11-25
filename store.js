@@ -32,6 +32,9 @@ const api = {
   saveProfile(p) { return call('PATCH', '/me', p); },
   async getUser(id) { return (await call('GET', '/users/' + id)).user; },
   userPosts(id) { return call('GET', `/posts?author=${encodeURIComponent(id)}`); },
+  setPrivate(v) { return call('PATCH', '/me', { private: v }); },
+  requests() { return call('GET', '/follow-requests'); },
+  answerRequest(id, action) { return call('POST', `/follow-requests/${id}`, { action }); },
   follow(id) { return call('POST', `/users/${id}/follow`); },
   stats(scope) { return call('GET', '/stats?scope=' + encodeURIComponent(scope)); },
   posts({ scope, cat, before }) { return call('GET', `/posts?scope=${encodeURIComponent(scope)}&cat=${cat || 'tudo'}${before ? '&before=' + before : ''}`); },
@@ -69,6 +72,9 @@ const demo = {
   async getUser() { return null; },
   async userPosts() { return { posts: [] }; },
   async follow() {},
+  async setPrivate() {},
+  async requests() { return { requests: [], followers: [] }; },
+  async answerRequest() {},
   async stats(scope) {
     const s = scope === 'brasil' ? 'brasil' : Number(scope);
     const delays = L.delays(s);
