@@ -198,3 +198,26 @@ form.card{margin:12px 0}
 .anontxt{display:flex;flex-direction:column;gap:2px}.anontxt b{font-weight:700;font-size:15px}
 .check.mini{margin:6px 0 0;font-size:13px;font-weight:500}
 .tag.you{background:#e3f6ea;color:#14633a}
+
+/* telas antes do login: fundo azul */
+body.dark-welcome main.pad{color:#fff}
+body.dark-welcome main.pad h2{color:#fff;margin:6px 0 2px;font-size:24px}
+body.dark-welcome main.pad label,body.dark-welcome main.pad .field{color:#e6edf8}
+body.dark-welcome main.pad .muted{color:#b8c4d9}
+body.dark-welcome main.pad .back{color:#8fb8ff}
+body.dark-welcome main.pad a{color:#8fb8ff}
+body.dark-welcome main.pad .error{color:#ff9b9b}
+body.dark-welcome main.pad .check span{color:#e6edf8}
+body.dark-welcome main.pad .picked{color:#4ade80}
+body.dark-welcome main.pad .reglist,body.dark-welcome main.pad .search input,body.dark-welcome main.pad .reglist *{color:var(--text)}
+body.dark-welcome main.pad .reglist .muted{color:var(--muted)}
+body.dark-welcome main.pad .search svg{color:#8fb8ff}
+body.dark-welcome main.pad .eye{color:#5f6b80}
+body.dark-welcome main.pad .req{color:#ff8a80}
+.authlogo{display:flex;flex-direction:column;align-items:center;gap:6px;margin:0 0 10px}
+.authlogo .wlogo{background:#fff;border-radius:50%;padding:2px;line-height:0}
+.authlogo .brand{font-family:"UniBrand",Georgia,serif;font-weight:800;font-size:30px;color:#fff}
+body.dark-welcome main.pad .btn.big{margin-top:14px}
+body.dark-welcome main.pad input,body.dark-welcome main.pad select,body.dark-welcome main.pad textarea{color:var(--text)}
+body.dark-welcome main.pad .crtrbox{color:var(--text)}
+body.dark-welcome main.pad .crtrbox span{color:var(--blue)}

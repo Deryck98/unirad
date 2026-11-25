@@ -154,7 +154,9 @@ const pw = (name, label, ph, ac, val = '') => `<label>${label} <i class="req">*<
 function screenLogin() {
   return `<main class="pad fit">
     <button class="ghost back" data-action="go-welcome">← Voltar</button>
-    <h2>Entrar</h2>
+    <div class="authlogo"><div class="wlogo">${emblem({ size: 76, text: false })}</div><div class="brand">UniRad</div></div>
+    <h2>Entrar na sua conta</h2>
+    <p class="muted">Use o e-mail e a senha do seu cadastro.</p>
     <form data-form="login" novalidate>
       <label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
       <label>Senha<span class="pwbox"><input name="password" type="password" autocomplete="current-password" required><button type="button" class="eye" data-action="toggle-pw" aria-label="Mostrar senha">${ic('eye', 22)}</button></span></label>
@@ -176,6 +178,7 @@ function screenSignup() {
   if (ui.signupStep === 1) {
     return `<main class="pad fit">
     <button class="ghost back" data-action="go-welcome">← Voltar</button>
+    <div class="authlogo"><div class="wlogo">${emblem({ size: 76, text: false })}</div><div class="brand">UniRad</div></div>
     <h2>Criar cadastro</h2>
     <p class="muted">Passo 1 de 2 · seus dados de acesso</p>
     <form data-form="signup1" novalidate>
@@ -363,7 +366,7 @@ function header() {
 }
 
 function render() {
-  document.body.classList.toggle('dark-welcome', !ui.user && ui.screen === 'welcome');
+  document.body.classList.toggle('dark-welcome', !ui.user);
   if (!ui.user) {
     $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
