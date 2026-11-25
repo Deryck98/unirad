@@ -325,10 +325,7 @@ function screenSignup() {
 
 const SHORTCUTS = [['tudo', 'users', 'Tudo'], ['vagas', 'briefcase', 'Vagas'], ['cursos', 'book', 'Cursos'], ['enquete', 'poll', 'Enquetes']];
 function shortcuts() {
-  return `<div class="stories">${SHORTCUTS.filter(([k]) => k !== 'enquete' || Store.mode === 'api').map(([k, i, l]) => {
-    const on = k === 'atrasos' ? false : ui.cat === k;
-    return `<button class="story s-${k} ${on ? 'on' : ''}" data-action="${k === 'atrasos' ? 'tab' : 'cat'}" ${k === 'atrasos' ? 'data-t="atrasos"' : `data-c="${k}"`}><span class="ring"><span class="in">${ic(i, 22)}</span></span><span class="lbl">${l}</span></button>`;
-  }).join('')}</div>`;
+  return `<div class="pills" role="group" aria-label="Filtrar publicações">${SHORTCUTS.filter(([k]) => k !== 'enquete' || Store.mode === 'api').map(([k, i, l]) => `<button type="button" class="pill ${ui.cat === k ? 'on' : ''}" data-action="cat" data-c="${k}">${ic(i, 16)}<span>${k === 'tudo' ? 'Para você' : l}</span></button>`).join('')}</div>`;
 }
 
 function screenHome() {
@@ -781,6 +778,8 @@ function render() {
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
   const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'link' ? modalLink() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
+  if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom)'); if (ov) ov.classList.add('enter'); }
+  ui.prevModal = ui.modal;
   bindModal();
 }
 

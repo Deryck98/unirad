@@ -562,3 +562,31 @@ body:not(.dark-welcome){background:#eef3fb}
 .vleg{display:flex;gap:12px;flex-wrap:wrap}
 .vleg span{display:inline-flex;align-items:center;gap:5px}
 .vleg i{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+/* refinamento visual: padrão rede social */
+body{background:#f1f4f9}
+.feed{background:#f1f4f9}
+.pills{display:flex;gap:8px;overflow-x:auto;padding:12px 12px 6px;scrollbar-width:none;background:#f1f4f9}
+.pills::-webkit-scrollbar{display:none}
+.pill{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 15px;border-radius:999px;background:#fff;border:1px solid #d5ddeb;color:var(--navy);font-size:14px;font-weight:600;transition:background .15s,transform .1s}
+.pill:active{transform:scale(.96)}
+.pill.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.pill.on svg{color:var(--gold)}
+.stories{display:none}
+.composer{margin:8px 12px;border:1px solid #e1e7f2;border-radius:16px;background:#fff;padding:10px 12px}
+.composer .fake{background:#f1f4f9}
+.vtabs{border-bottom:1px solid #e1e7f2}
+.post{margin:0 12px 10px;border:1px solid #e1e7f2;border-radius:16px;padding:14px 14px 6px;box-shadow:0 1px 2px rgba(11,31,58,.04)}
+.post .name{font-size:15px;font-weight:600;color:var(--navy)}
+.post .chip{border-radius:10px;padding:3px 10px}
+.post .body{font-size:15.5px;line-height:1.5}
+.actions{border-top:1px solid #eef1f7;margin:8px 0 0;padding-top:2px}
+.actions .act{transition:background .15s}
+.annc{margin:6px 12px 0;border:1px solid #f2d27a;border-left:1px solid #f2d27a;border-radius:16px;background:#fff7e0;padding:12px 14px}
+.overlay.enter{animation:ovin .18s ease}
+.overlay.enter .sheet{animation:shup .24s cubic-bezier(.2,.8,.2,1)}
+@keyframes ovin{from{opacity:0}to{opacity:1}}
+@keyframes shup{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}
+button{-webkit-tap-highlight-color:transparent}
+.btn:active,.ecard:active,.lrow:active{transform:scale(.985)}
+@media (prefers-reduced-motion:reduce){.overlay.enter,.overlay.enter .sheet,.page-in{animation:none}.pill,.actions .act{transition:none}}
