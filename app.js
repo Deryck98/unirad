@@ -500,6 +500,53 @@ function modalRate() {
     <div class="rq">${m[1]}</div><div class="ropts">${opts}</div>
     <div class="row between rnav"><button class="linkbtn" data-action="rback" ${rt.i === 0 ? 'disabled' : ''}>Voltar</button><button class="linkbtn" data-action="rskip">${rt.i === n - 1 ? 'Concluir' : 'Pular'}</button></div>`);
 }
+const COUNCIL_META = [
+  ['cresp', 'Responde quando você procura', 'scale'],
+  ['cfisc', 'Fiscaliza hospitais e empresas', 'scale'],
+  ['cconta', 'Presta contas à categoria', 'scale'],
+  ['cdef', 'Defende piso e jornada', 'scale'],
+  ['couve', 'Ouve a categoria', 'scale']
+];
+const councilName = (c) => (c.id === 'conter' ? 'CONTER' : `CRTR · ${regionLabel(c.region).split(' · ')[0]}`);
+const councilSub = (c) => (c.id === 'conter' ? 'Conselho Nacional' : 'Conselho da sua região');
+function councilCard(c) {
+  return `<button class="ecard" data-action="open-council" data-id="${c.id}"><span class="sgl av${c.id === 'conter' ? 0 : 2}">${c.id === 'conter' ? 'CT' : 'CR'}</span><span class="einfo"><b>${esc(councilName(c))}</b><span class="muted small">${councilSub(c)} · ${c.raters} ${c.raters === 1 ? 'avaliação' : 'avaliações'}</span>${c.crit ? `<span class="ptag bad">${c.crit} ${c.crit === 1 ? 'alerta' : 'alertas'}</span>` : c.geral != null ? '<span class="ptag good">Sem alertas</span>' : '<span class="ptag">Poucas respostas</span>'}</span>${ring(c.geral)}</button>`;
+}
+function conselhoSection() {
+  if (Store.mode !== 'api' || !ui.councils) return '';
+  return `<h3 class="usec">Conselho: cobrar quem fiscaliza</h3>
+    <p class="muted small">A nota é do órgão, nunca de uma pessoa. Cada assunto aparece com 3 respostas ou mais.</p>
+    ${ui.councils.map(councilCard).join('')}
+    <button class="btn out" data-action="open-demands" style="margin:2px 0 10px">Ver e fazer cobranças ao conselho</button>
+    <div class="unioncard elec"><b>Eleições do conselho</b>
+      <p>Data, local e candidatos devem ser conferidos só em fonte oficial. Compare as propostas e vote.</p>
+      <a class="btn out" target="_blank" rel="noopener noreferrer" href="https://www.conter.gov.br" style="text-align:center;text-decoration:none">Ver no site do CONTER</a></div>`;
+}
+function modalCouncil() {
+  const c = (ui.councils || []).find((x) => x.id === ui.councilSel);
+  if (!c) return psheet('Conselho', '<p class="muted small" style="margin-top:50px">Carregando…</p>');
+  return psheet(councilName(c), `<div class="prow2"><span class="sgl big av${c.id === 'conter' ? 0 : 2}">${c.id === 'conter' ? 'CT' : 'CR'}</span>${ring(c.geral, 58)}</div>
+    <h3 class="ptitle">${esc(councilName(c))}</h3><div class="muted small">${councilSub(c)} · ${c.raters} ${c.raters === 1 ? 'avaliação' : 'avaliações'}</div>
+    <div class="row gap8" style="margin:12px 0"><button class="btn gold" style="flex:1" data-action="rate-council" data-id="${c.id}">Avaliar</button><button class="btn out" style="flex:1" data-action="open-demands">Cobranças</button></div>
+    ${alertBoxes(c.topics, COUNCIL_META)}<div class="tps">${COUNCIL_META.map((m) => topicBar(m, c.topics[m[0]])).join('')}</div>
+    ${c.geral == null ? '<p class="muted small">Cada assunto só aparece depois de 3 respostas, para proteger quem avalia.</p>' : ''}`);
+}
+function modalDemands() {
+  const list = ui.demands;
+  const lbl = (d) => (d.body === 'conter' ? 'Para o CONTER' : 'Para o seu CRTR');
+  return sheet('Cobranças ao conselho', `<p class="muted small">Cobre o órgão, nunca uma pessoa. Quanto mais colegas apoiam, mais forte fica o pedido. Ninguém vê quem apoiou.</p>
+    <button class="btn gold" data-action="new-demand" style="margin-bottom:10px">Fazer uma cobrança</button>
+    ${!list ? '<p class="muted small">Carregando…</p>' : list.map((d) => `<div class="dcard"><div class="muted small">${lbl(d)} · ${ago(d.t)}</div><p>${esc(d.text)}</p><div class="row between"><span><b>${d.n}</b> ${d.n === 1 ? 'colega apoia' : 'colegas apoiam'}</span><span>${d.mine ? `<button class="linkbtn" data-action="del-demand" data-id="${d.id}">Apagar</button>` : ''}<button class="chip2 ${d.sup ? 'on' : ''}" data-action="support-demand" data-id="${d.id}">${d.sup ? 'Você apoia' : 'Eu também'}</button></span></div></div>`).join('') || '<p class="muted small">Nenhuma cobrança ainda. Seja o primeiro.</p>'}`);
+}
+function modalDemandNew() {
+  const dn = ui.dnew || { body: 'crtr', text: '' };
+  return sheet('Fazer uma cobrança', `<div class="muted small">Cobrar quem?</div>
+    <div class="chips" role="group" aria-label="Destino"><button type="button" class="chip2 ${dn.body === 'crtr' ? 'on' : ''}" data-action="dbody" data-v="crtr">Meu CRTR</button><button type="button" class="chip2 ${dn.body === 'conter' ? 'on' : ''}" data-action="dbody" data-v="conter">CONTER</button></div>
+    <label>O que você quer cobrar?<textarea id="dtext" rows="4" maxlength="200" placeholder="Ex.: Fiscalizar empresas que obrigam o profissional a virar sócio">${esc(dn.text)}</textarea></label>
+    <p class="muted small">Cobre o órgão. Não cite pessoas pelo nome nem coloque links. É anônimo.</p>
+    <div class="error" id="formError" role="alert"></div>
+    <div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" data-action="send-demand">Publicar cobrança</button></div>`);
+}
 async function openPlace(id) { ui.place = null; ui.ptab = 'resumo'; openOver('place'); ui.place = await Store.place(id); if (ui.modal === 'place') render(); }
 async function refreshLists() {
   try { const sc = scopeOf(ui.view === 'seguindo' ? 'mine' : ui.view); const [a, b] = await Promise.all([Store.places(sc), Store.companies()]); ui.places = a.places; ui.companies = b.companies; } catch { /* ignorado */ }
@@ -509,6 +556,7 @@ function buildSteps(rt) {
   return [...pay, ...LOCM.map((m) => ({ m, target: 'place' }))];
 }
 async function finishRate() {
+  if (ui.rt.council) { const cid = ui.rt.council; (ui.stk || []).pop(); popSilently(); ui.rt = null; try { ui.councils = (await Store.councils()).councils; } catch { /* ignorado */ } ui.councilSel = cid; ui.modal = 'council'; render(); toast('Avaliação salva. Obrigado!'); return; }
   const id = ui.rt.placeId; if (ui.rt.fromPlace) { (ui.stk || []).pop(); popSilently(); } ui.rt = null;
   await refreshLists();
   ui.place = await Store.place(id); ui.ptab = 'resumo'; ui.modal = 'place'; render(); toast('Avaliação salva. Obrigado!');
@@ -525,6 +573,7 @@ function screenRights() {
     <p class="muted small">Informativo geral, não é aconselhamento jurídico. Confira sempre o texto atual da lei.</p>
     <div class="list">${RIGHTS.map(([t, b]) => `<details class="acc2"><summary><span>${esc(t)}</span>${ic('chev', 18)}</summary><p>${esc(b)}</p></details>`).join('')}</div>
     <div class="list"><a class="lrow" target="_blank" rel="noopener" href="https://www.conter.gov.br"><span>CONTER e CRTRs<br><span class="muted small">No site do CONTER você encontra o CRTR da sua região.</span></span>${ic('chev', 18)}</a></div>
+    ${conselhoSection()}
     ${Store.mode === 'api' && ui.union ? `<div class="unioncard"><b>Um sindicato para a nossa categoria</b>
       <p>${ui.union.count >= 10 ? `${ui.union.count} profissionais já apoiam. ` : 'Seja um dos primeiros a apoiar. '}Seu apoio conta e ninguém vê seu nome.</p>
       <button class="btn ${ui.union.mine ? 'out' : 'gold'}" data-action="union">${ui.union.mine ? 'Apoiando (tocar para retirar)' : 'Quero apoiar'}</button></div>` : ''}
@@ -750,7 +799,7 @@ const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignora
 const popSilently = () => { ui.skipPop = 1; history.back(); };
 function openModal(m) { ui.modal = m; pushH(); render(); }
 function openOver(m) { (ui.stk = ui.stk || []).push(ui.modal); openModal(m); }
-function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'pick' || ui.modal === 'rate' || ui.modal === 'link') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
+function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'pick' || ui.modal === 'rate' || ui.modal === 'link' || ui.modal === 'council' || ui.modal === 'demands' || ui.modal === 'dnew') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
 function closeModal() { if (ui.modal) { ui.modal = backModal(); if (!ui.modal) ui.stk = []; popSilently(); } render(); }
 function openRootModal(html) { document.getElementById('modalRoot').innerHTML = html; ui.rootModal = true; pushH(); }
 function closeRootModal() { document.getElementById('modalRoot').innerHTML = ''; if (ui.rootModal) { ui.rootModal = false; popSilently(); } }
@@ -769,14 +818,14 @@ window.addEventListener('popstate', () => {
 
 function render() {
   document.body.classList.toggle('dark-welcome', !ui.user);
-  document.body.classList.toggle('noscroll', ui.modal === 'notifs' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
+  document.body.classList.toggle('noscroll', ui.modal === 'notifs' || ui.modal === 'place' || ui.modal === 'council' || ui.modal === 'company' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
   if (!ui.user) {
     $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'link' ? modalLink() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom)'); if (ov) ov.classList.add('enter'); }
   ui.prevModal = ui.modal;
@@ -800,7 +849,7 @@ async function refresh({ quiet = false } = {}) {
       ui.stats = stats; ui.places = pl.places; ui.companies = co.companies;
     } else if (ui.tab === 'direitos') {
       render();
-      if (Store.mode === 'api') { try { ui.union = await Store.union(); if (ui.tab === 'direitos') render(); } catch { /* ignorado */ } }
+      if (Store.mode === 'api') { try { const [u, cn] = await Promise.all([Store.union(), Store.councils().catch(() => ({ councils: [] }))]); ui.union = u; ui.councils = cn.councils; if (ui.tab === 'direitos') render(); } catch { /* ignorado */ } }
       return;
     } else { return render(); }
   } catch (e) {
@@ -996,11 +1045,30 @@ document.addEventListener('click', async (ev) => {
       const val = Number(el.dataset.v), same = mine[st.m[0]] === val, prev = mine[st.m[0]];
       if (same) delete mine[st.m[0]]; else mine[st.m[0]] = val;
       render(); rt.lock = true;
-      const call = st.target === 'company' ? Store.rateCompany(rt.companyId, rt.placeId, st.m[0], same ? null : val) : Store.ratePlace(rt.placeId, st.m[0], same ? null : val);
+      const call = st.target === 'company' ? Store.rateCompany(rt.companyId, rt.placeId, st.m[0], same ? null : val) : st.target === 'council' ? Store.rateCouncil(rt.council, st.m[0], same ? null : val) : Store.ratePlace(rt.placeId, st.m[0], same ? null : val);
       try { await call; } catch (e) { if (prev === undefined) delete mine[st.m[0]]; else mine[st.m[0]] = prev; rt.lock = false; render(); toast(e.message); return; }
       if (same) { rt.lock = false; return; }
       setTimeout(go, 220); return;
     }
+    if (a === 'open-council') { ui.councilSel = el.dataset.id; return openOver('council'); }
+    if (a === 'rate-council') {
+      const c = ui.councils.find((x) => x.id === el.dataset.id);
+      ui.rt = { council: c.id, pname: councilName(c), mineP: { ...c.mine }, mineC: {}, steps: COUNCIL_META.map((m) => ({ m, target: 'council' })), i: 0 };
+      return openOver('rate');
+    }
+    if (a === 'open-demands') { ui.demands = null; openOver('demands'); try { ui.demands = (await Store.demands()).demands; } catch (e) { toast(e.message); } if (ui.modal === 'demands') render(); return; }
+    if (a === 'new-demand') { ui.dnew = { body: 'crtr', text: '' }; return openOver('dnew'); }
+    if (a === 'dbody') { const t = document.getElementById('dtext'); if (t) ui.dnew.text = t.value; ui.dnew.body = el.dataset.v; return render(); }
+    if (a === 'send-demand') {
+      const t = document.getElementById('dtext'); ui.dnew.text = t ? t.value : '';
+      try { await Store.createDemand(ui.dnew.body, ui.dnew.text); } catch (e) { return err(e.message); }
+      ui.demands = null; closeModal(); try { ui.demands = (await Store.demands()).demands; } catch { /* ignorado */ } render(); toast('Cobrança publicada.'); return;
+    }
+    if (a === 'support-demand') {
+      const d = ui.demands.find((x) => x.id === el.dataset.id); if (!d) return;
+      try { const r = await Store.supportDemand(d.id); d.sup = r.sup; d.n = r.n; render(); } catch (e) { toast(e.message); } return;
+    }
+    if (a === 'del-demand') { try { await Store.deleteDemand(el.dataset.id); ui.demands = ui.demands.filter((x) => x.id !== el.dataset.id); render(); toast('Cobrança apagada.'); } catch (e) { toast(e.message); } return; }
     if (a === 'open-link') { ui.linkUrl = el.dataset.url; return openOver('link'); }
     if (a === 'link-opened') { return closeModal(); }
     if (a === 'copy-link') {

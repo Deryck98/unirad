@@ -590,3 +590,6 @@ body{background:#f1f4f9}
 button{-webkit-tap-highlight-color:transparent}
 .btn:active,.ecard:active,.lrow:active{transform:scale(.985)}
 @media (prefers-reduced-motion:reduce){.overlay.enter,.overlay.enter .sheet,.page-in{animation:none}.pill,.actions .act{transition:none}}
+.dcard{border:1px solid #e1e7f2;border-radius:14px;padding:12px;margin-bottom:10px;background:#fff}
+.dcard p{margin:4px 0 10px;font-size:15px;line-height:1.45;color:var(--navy)}
+.unioncard.elec{margin-top:10px}

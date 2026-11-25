@@ -7,7 +7,8 @@ const SESSION_DAYS = 30;
 const ROLES = ['Técnico em Radiologia', 'Tecnólogo em Radiologia'];
 const DELAY_TYPES = ['Salário atrasado', 'Pagamento abaixo do piso', 'Hora extra / plantão sem pagar', 'Adicional não pago', 'Outro'];
 const CATS = ['geral', 'vagas', 'cursos', 'enquete', 'aviso'];
-const TOPICS = { estrutura: 'scale', protecao: 'scale', dosimetro: 'scale', ambiente: 'scale', piso: 'yn', jornada: 'yn', pagamento: 'yn', desconto: 'yn', exigiu: 'yn' };
+const TOPICS = { estrutura: 'scale', protecao: 'scale', dosimetro: 'scale', ambiente: 'scale', piso: 'yn', jornada: 'yn', pagamento: 'yn', desconto: 'yn', exigiu: 'yn', cresp: 'scale', cfisc: 'scale', cconta: 'scale', cdef: 'scale', couve: 'scale' };
+const COUNCIL = ['cresp', 'cfisc', 'cconta', 'cdef', 'couve'];
 const COMP_ONLY = ['desconto', 'exigiu', 'vinculo'];
 const KINDS = ['hospital', 'upa', 'clinica', 'outro'];
 const MIN_RATES = 3;
@@ -165,6 +166,9 @@ async function deleteAccount(req, env, user) {
     env.DB.prepare('DELETE FROM company_rates WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM watch WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM union_support WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM council_rates WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM demand_support WHERE user_id = ? OR demand_id IN (SELECT id FROM demands WHERE user_id = ?)').bind(id, id),
+    env.DB.prepare('DELETE FROM demands WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id)
   ]);
@@ -608,7 +612,7 @@ export default {
       if (plm && plm[2] && m === 'PUT') {
         const b = await readJson(req);
         const topic = str(b.topic, 20), kind = TOPICS[topic];
-        if (!kind || COMP_ONLY.includes(topic)) throw bad('Assunto inválido.');
+        if (!kind || COMP_ONLY.includes(topic) || COUNCIL.includes(topic)) throw bad('Assunto inválido.');
         if (!(await env.DB.prepare('SELECT 1 AS x FROM places WHERE id = ?').bind(plm[1]).first())) throw new HttpError(404, 'Local não encontrado.');
         if (b.value === null) { await env.DB.prepare('DELETE FROM place_rates WHERE place_id = ? AND user_id = ? AND topic = ?').bind(plm[1], user.id, topic).run(); return json({ ok: true }); }
         const v = Number(b.value);
@@ -695,6 +699,64 @@ export default {
       if (p === '/api/announcement' && m === 'DELETE') {
         if (!user.is_admin) throw new HttpError(403, 'Só a equipe do UniRad remove avisos oficiais.');
         await env.DB.prepare('UPDATE announcements SET active = 0 WHERE active = 1').run();
+        return json({ ok: true });
+      }
+      if (p === '/api/councils' && m === 'GET') {
+        const ids = ['conter', `crtr-${user.region}`];
+        const out = [];
+        for (const id of ids) {
+          const rs = await env.DB.prepare('SELECT council AS place_id, topic, COUNT(*) AS n, AVG(value) AS avg, SUM(value = 1) AS nao, SUM(value = 5) AS sim FROM council_rates WHERE council = ? GROUP BY topic').bind(id).all();
+          const sm = summarize(rs.results);
+          const raters = (await env.DB.prepare('SELECT COUNT(DISTINCT user_id) AS n FROM council_rates WHERE council = ?').bind(id).first()).n;
+          const mine = await env.DB.prepare('SELECT topic, value FROM council_rates WHERE council = ? AND user_id = ?').bind(id, user.id).all();
+          out.push({ id, region: id === 'conter' ? null : user.region, raters, geral: sm.geral, crit: sm.crit, topics: sm.topics, mine: Object.fromEntries(mine.results.map((r) => [r.topic, r.value])) });
+        }
+        return json({ councils: out });
+      }
+      const cnm = p.match(/^\/api\/councils\/(conter|crtr-\d{1,2})\/rate$/);
+      if (cnm && m === 'PUT') {
+        if (cnm[1] !== 'conter' && cnm[1] !== `crtr-${user.region}`) throw new HttpError(403, 'Você só avalia o CRTR da sua região.');
+        const b = await readJson(req);
+        const topic = str(b.topic, 20);
+        if (!COUNCIL.includes(topic)) throw bad('Assunto inválido.');
+        if (b.value === null) { await env.DB.prepare('DELETE FROM council_rates WHERE council = ? AND user_id = ? AND topic = ?').bind(cnm[1], user.id, topic).run(); return json({ ok: true }); }
+        const v = Number(b.value);
+        if (![1, 2, 3, 4, 5].includes(v)) throw bad('Nota inválida.');
+        await rateLimit(env, 'council_rates', user.id, 60, DAY);
+        await env.DB.prepare('INSERT INTO council_rates (council, user_id, topic, value, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (council, user_id, topic) DO UPDATE SET value = excluded.value').bind(cnm[1], user.id, topic, v, Date.now()).run();
+        return json({ ok: true });
+      }
+      if (p === '/api/demands' && m === 'GET') {
+        const rs = await env.DB.prepare("SELECT d.id, d.body, d.text, d.created_at AS t, d.user_id = ? AS mine, (SELECT COUNT(*) FROM demand_support s WHERE s.demand_id = d.id) AS n, EXISTS (SELECT 1 FROM demand_support s WHERE s.demand_id = d.id AND s.user_id = ?) AS sup FROM demands d WHERE d.body IN ('conter', ?) ORDER BY n DESC, d.created_at DESC LIMIT 40").bind(user.id, user.id, `crtr-${user.region}`).all();
+        return json({ demands: rs.results.map((r) => ({ id: r.id, body: r.body, text: r.text, t: r.t, mine: !!r.mine, n: r.n, sup: !!r.sup })) });
+      }
+      if (p === '/api/demands' && m === 'POST') {
+        const b = await readJson(req);
+        const body = b.body === 'conter' ? 'conter' : `crtr-${user.region}`;
+        const text = str(b.text, 200).replace(/\s+/g, ' ');
+        if (text.length < 10) throw bad('Escreva a cobrança com pelo menos 10 letras.');
+        if (/https?:\/\//i.test(text)) throw bad('Não coloque links na cobrança.');
+        await rateLimit(env, 'demands', user.id, 3, DAY);
+        const id = crypto.randomUUID();
+        await env.DB.batch([
+          env.DB.prepare('INSERT INTO demands (id, body, user_id, text, created_at) VALUES (?, ?, ?, ?, ?)').bind(id, body, user.id, text, Date.now()),
+          env.DB.prepare('INSERT INTO demand_support (demand_id, user_id, created_at) VALUES (?, ?, ?)').bind(id, user.id, Date.now())
+        ]);
+        return json({ id }, 201);
+      }
+      const dmm = p.match(/^\/api\/demands\/([0-9a-f-]{36})(\/support)?$/);
+      if (dmm && dmm[2] && m === 'POST') {
+        const d = await env.DB.prepare("SELECT id FROM demands WHERE id = ? AND body IN ('conter', ?)").bind(dmm[1], `crtr-${user.region}`).first();
+        if (!d) throw new HttpError(404, 'Cobrança não encontrada.');
+        const del = await env.DB.prepare('DELETE FROM demand_support WHERE demand_id = ? AND user_id = ?').bind(dmm[1], user.id).run();
+        if (!del.meta.changes) await env.DB.prepare('INSERT INTO demand_support (demand_id, user_id, created_at) VALUES (?, ?, ?)').bind(dmm[1], user.id, Date.now()).run();
+        const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM demand_support WHERE demand_id = ?').bind(dmm[1]).first()).n;
+        return json({ sup: !del.meta.changes, n });
+      }
+      if (dmm && !dmm[2] && m === 'DELETE') {
+        const d = await env.DB.prepare('SELECT id FROM demands WHERE id = ? AND user_id = ?').bind(dmm[1], user.id).first();
+        if (!d) throw new HttpError(404, 'Cobrança não encontrada.');
+        await env.DB.batch([env.DB.prepare('DELETE FROM demand_support WHERE demand_id = ?').bind(dmm[1]), env.DB.prepare('DELETE FROM demands WHERE id = ?').bind(dmm[1])]);
         return json({ ok: true });
       }
       if (p === '/api/union' && m === 'GET') {
