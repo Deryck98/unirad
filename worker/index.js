@@ -405,7 +405,7 @@ async function toggleLike(env, user, id) {
 }
 
 const STORY_TTL = DAY;
-const STORY_BGS = 5;
+const STORY_BGS = 48;
 
 async function dropExpiredStories(env) {
   const old = await env.DB.prepare('SELECT id, image FROM stories WHERE created_at < ? LIMIT 30').bind(Date.now() - STORY_TTL).all();
