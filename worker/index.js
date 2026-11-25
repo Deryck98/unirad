@@ -317,7 +317,10 @@ async function votePoll(req, env, user, id) {
   if (!row || !row.poll) throw new HttpError(404, 'Enquete não encontrada.');
   const opt = Number(b.opt);
   if (!Number.isInteger(opt) || opt < 0 || opt >= JSON.parse(row.poll).length) throw bad('Opção inválida.');
-  await env.DB.prepare('INSERT OR IGNORE INTO poll_votes (post_id, user_id, opt) VALUES (?, ?, ?)').bind(id, user.id, opt).run();
+  const cur = await env.DB.prepare('SELECT opt FROM poll_votes WHERE post_id = ? AND user_id = ?').bind(id, user.id).first();
+  if (cur && cur.opt === opt) await env.DB.prepare('DELETE FROM poll_votes WHERE post_id = ? AND user_id = ?').bind(id, user.id).run();
+  else if (cur) await env.DB.prepare('UPDATE poll_votes SET opt = ? WHERE post_id = ? AND user_id = ?').bind(opt, id, user.id).run();
+  else await env.DB.prepare('INSERT INTO poll_votes (post_id, user_id, opt) VALUES (?, ?, ?)').bind(id, user.id, opt).run();
   return json({ ok: true });
 }
 

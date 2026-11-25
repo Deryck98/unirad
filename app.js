@@ -72,9 +72,9 @@ function pollHtml(p) {
   return `<div class="poll">${pl.options.map((o, i) => {
     const pct = pl.total ? Math.round((o.n / pl.total) * 100) : 0;
     return voted
-      ? `<div class="opt res ${pl.voted === i ? 'mine' : ''}" style="--w:${pct}%"><span>${esc(o.t)}</span><b>${pct}%</b></div>`
+      ? `<button class="opt res ${pl.voted === i ? 'mine' : ''}" data-action="vote" data-id="${p.id}" data-i="${i}" aria-label="${pl.voted === i ? 'Remover meu voto' : 'Votar'}"><span>${esc(o.t)}</span><b>${pct}%</b></button>`
       : `<button class="opt" data-action="vote" data-id="${p.id}" data-i="${i}">${esc(o.t)}</button>`;
-  }).join('')}<div class="muted small">${pl.total} ${pl.total === 1 ? 'voto' : 'votos'}${voted ? '' : ' · escolha uma opção'}</div></div>`;
+  }).join('')}<div class="muted small">${pl.total} ${pl.total === 1 ? 'voto' : 'votos'}${voted ? ' · toque na sua escolha para tirar o voto' : ' · escolha uma opção'}</div></div>`;
 }
 
 function postCard(p) {
@@ -94,8 +94,8 @@ function postCard(p) {
       ${pollHtml(p)}
       ${p.place || p.salary ? `<div class="meta">${p.place ? `<span>${ic('briefcase', 14)} ${esc(p.place)}</span>` : ''}${p.salary ? `<span>Salário: ${esc(p.salary)}</span>` : ''}</div>` : ''}
       <div class="actions">
-        <button class="act" data-action="toggle-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 20)}<span>${p.comments.length || ''}</span></button>
         <button class="act ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}" aria-label="Curtir">${ic('heart', 20)}<span>${p.likes || ''}</span></button>
+        <button class="act" data-action="toggle-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 20)}<span>${p.comments.length || ''}</span></button>
         <button class="act" data-action="share" data-id="${p.id}" aria-label="Compartilhar">${ic('share', 20)}</button>
       </div>
       ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm">${avatar(c.author, null, 'sm')}<div class="bubble"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div></div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
@@ -533,7 +533,17 @@ document.addEventListener('click', async (ev) => {
       if (row) { row.hidden = !el.classList.contains('on'); if (!row.hidden) row.querySelector('input').focus(); }
       return;
     }
-    if (a === 'vote') { await Store.vote(el.dataset.id, Number(el.dataset.i)); return refresh({ quiet: true }); }
+    if (a === 'vote') {
+      const p = (ui.posts || []).find((x) => x.id === el.dataset.id); const i = Number(el.dataset.i);
+      if (p && p.poll) {
+        const pl = p.poll;
+        if (pl.voted !== null && pl.voted !== undefined) { pl.options[pl.voted].n--; pl.total--; }
+        if (pl.voted === i) pl.voted = null; else { pl.options[i].n++; pl.total++; pl.voted = i; }
+        render();
+      }
+      try { await Store.vote(el.dataset.id, i); } catch (e) { toast(e.message); }
+      return refresh({ quiet: true });
+    }
     if (a === 'copy-link') { try { await navigator.clipboard.writeText(location.origin); toast('Link copiado.'); } catch { toast(location.origin); } return; }
     if (a === 'invite') {
       ev.preventDefault();
@@ -572,7 +582,15 @@ document.addEventListener('click', async (ev) => {
     if (a === 'change-avatar') { document.getElementById('avatarIn').click(); return; }
     if (a === 'remove-avatar') { await Store.saveProfile({ avatar: '' }); ui.user.avatar = ''; return render(); }
     if (a === 'ask-delete') return openModal('delete');
-    if (a === 'like') { await Store.toggleLike(el.dataset.id); return refresh({ quiet: true }); }
+    if (a === 'like') {
+      const p = (ui.posts || []).find((x) => x.id === el.dataset.id); if (!p) return;
+      if (el.dataset.busy) return;
+      const flip = () => { p.liked = !p.liked; p.likes = Math.max(0, p.likes + (p.liked ? 1 : -1)); el.classList.toggle('liked', p.liked); el.querySelector('span').textContent = p.likes || ''; };
+      flip(); el.classList.remove('pop'); void el.offsetWidth; if (p.liked) el.classList.add('pop');
+      el.dataset.busy = '1';
+      try { await Store.toggleLike(p.id); } catch (e) { flip(); toast(e.message); } finally { delete el.dataset.busy; }
+      return;
+    }
     if (a === 'toggle-comments') { ui.open[el.dataset.id] = !ui.open[el.dataset.id]; return render(); }
     if (a === 'report') { if (confirm('Denunciar esta publicação por ofensa ou dados de paciente?')) { await Store.report(el.dataset.id); toast('Denúncia enviada. Obrigado.'); refresh({ quiet: true }); } return; }
     if (a === 'delete-post') { if (confirm('Apagar sua publicação?')) { await Store.deletePost(el.dataset.id); refresh({ quiet: true }); } return; }

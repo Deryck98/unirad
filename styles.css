@@ -282,3 +282,6 @@ img.avatar{display:block}
 .overlay.zoom img{max-width:100%;max-height:100%;object-fit:contain}
 .zclose{position:absolute;top:calc(10px + env(safe-area-inset-top));right:12px;color:#fff;width:44px;height:44px;display:flex;align-items:center;justify-content:center}
 @media(min-width:900px){.top{position:sticky}.col{margin-left:200px}.feed{max-width:640px;margin:0 auto}}
+button.opt.res{width:100%;text-align:left}
+.act.pop svg{animation:pop .28s ease}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
