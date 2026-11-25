@@ -325,8 +325,11 @@ function screenDelays() {
   const meta = MARCOS.find((m) => national < m) || MARCOS[MARCOS.length - 1];
   const showBar = national >= 50;
   const pct = Math.min(100, Math.round((national / meta) * 100));
+  const asub = Store.mode === 'api' ? `<div class="segtabs"><button class="${ui.asub === 'aval' ? '' : 'on'}" data-action="asub" data-v="mural">Atrasos</button><button class="${ui.asub === 'aval' ? 'on' : ''}" data-action="asub" data-v="aval">Avaliações</button></div>` : '';
+  if (ui.asub === 'aval' && Store.mode === 'api') return `<main class="pad">${viewSwitch()}${asub}<button class="btn gold" data-action="pick-place" style="margin-bottom:10px">Avaliar um local</button>${avalSection()}</main>`;
   return `<main class="pad">
     ${viewSwitch()}
+    ${asub}
     <section class="hero">
       <div class="small">Profissionais unidos · ${esc(viewName(ui.view))}</div>
       <div class="big-n">${members.toLocaleString('pt-BR')}</div>
@@ -339,14 +342,14 @@ function screenDelays() {
       <div class="stat amber"><div class="small">Atraso médio</div><div class="n">${delays.avgDays ? delays.avgDays + ' dias' : '—'}</div></div>
     </div>
     <div class="row gap8"><button class="btn big" style="flex:1" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>${Store.mode === 'api' ? `<button class="btn big gold" style="flex:1" data-action="pick-place">Avaliar local</button>` : ''}</div>
-    ${Store.mode === 'api' ? placesSection() : ''}
+
     ${delays.recent && delays.recent.length ? `<h3 class="sec">Relatos recentes</h3><div class="list">${delays.recent.map((r) => `<div class="lrow static"><span>${esc(r.type)}${r.days ? ` · ${r.days} dias` : ''}${r.months > 1 ? ` · ${r.months} meses` : ''}<br><span class="muted small">${ago(r.t)}</span></span><b class="redtxt">${esc(fmtMonth(r.month))}</b></div>`).join('')}</div>` : ''}
     ${delays.top.length ? `<div class="card"><div class="small muted">Locais mais citados</div>${delays.top.map((t) => `<div class="row between li"><span>${esc(t.hospital)}</span><b>${t.n} relatos</b></div>`).join('')}</div>`
       : `<p class="muted small">Locais aparecem aqui quando houver ao menos ${CONFIG.hideHospitalBelow} relatos sobre o mesmo, para proteger quem relata.</p>`}
   </main>`;
 }
 
-/* ---------- locais avaliados ---------- */
+/* ---------- locais e empresas avaliados ---------- */
 const KIND_NAME = { hospital: 'Hospital', upa: 'UPA', clinica: 'Clínica', outro: 'Outro' };
 const TOPIC_META = [
   ['piso', 'Paga o piso salarial?', 'yn', ['Sim, paga', 'Não paga', 'Às vezes'], 'Não paga o piso salarial'],
@@ -357,68 +360,124 @@ const TOPIC_META = [
   ['dosimetro', 'Dosímetro e vistoria', 'scale'],
   ['ambiente', 'Ambiente e respeito', 'scale']
 ];
+const PAYM = TOPIC_META.slice(0, 3), LOCM = TOPIC_META.slice(3);
 const WORDS = ['Péssimo', 'Ruim', 'Regular', 'Bom', 'Ótimo'];
 const wordOf = (avg) => WORDS[Math.min(4, Math.max(0, Math.round(avg) - 1))];
 const scoreCls = (v) => (v == null ? '' : v < 2.5 ? 'bad' : v >= 4 ? 'good' : 'mid');
-function placesSection() {
-  const all = ui.places || [], k = ui.pkind || 'todos';
-  const list = all.filter((p) => k === 'todos' || p.kind === k);
-  const chips = [['todos', 'Todos'], ['hospital', 'Hospital'], ['upa', 'UPA'], ['clinica', 'Clínica']].map(([v, l]) => `<button type="button" class="chip2 ${k === v ? 'on' : ''}" data-action="pkind" data-v="${v}">${l}</button>`).join('');
-  const rows = list.map((p) => `<button class="lrow" data-action="open-place" data-id="${p.id}"><span><b>${esc(p.name)}</b><br><span class="muted small">${KIND_NAME[p.kind] || ''} · ${p.raters} ${p.raters === 1 ? 'pessoa avaliou' : 'pessoas avaliaram'}${p.crit ? ` · <span class="redtxt">${p.crit} ${p.crit === 1 ? 'ponto crítico' : 'pontos críticos'}</span>` : ''}</span></span>${p.geral != null ? `<b class="geral ${scoreCls(p.geral)}">${String(p.geral).replace('.', ',')}</b>` : '<span class="muted small">poucas respostas</span>'}</button>`).join('');
-  return `<h3 class="sec">Locais avaliados</h3><div class="chips" role="group" aria-label="Filtrar locais">${chips}</div>
-    ${rows ? `<div class="list">${rows}</div>` : '<p class="muted small">Nenhum local avaliado aqui ainda. Toque em "Avaliar local" para ser o primeiro.</p>'}`;
+const RING = { bad: '#e24b4a', mid: '#ef9f27', good: '#639922', '': '#c5cddb' };
+const sigla = (n) => String(n).split(/\s+/).filter((w) => w.length > 1 || /\d/.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+function ring(v, size = 48) {
+  const c = 2 * Math.PI * 19, pct = v == null ? 0 : Math.max(0.05, v / 5), cls = scoreCls(v);
+  return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 48 48" role="img" aria-label="${v == null ? 'Sem nota ainda' : 'Nota ' + String(v).replace('.', ',')}"><circle cx="24" cy="24" r="19" fill="none" stroke="#e7ecf4" stroke-width="5"/><circle cx="24" cy="24" r="19" fill="none" stroke="${RING[cls]}" stroke-width="5" stroke-dasharray="${(c * pct).toFixed(1)} ${c.toFixed(1)}" stroke-linecap="round" transform="rotate(-90 24 24)"/><text x="24" y="29" text-anchor="middle" font-size="${v == null ? 16 : 14}" font-weight="600" fill="#0b1f3a">${v == null ? '–' : String(v).replace('.', ',')}</text></svg>`;
+}
+const normQ = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function entityCard(kind, e) {
+  const alert = e.crit ? `<span class="ptag bad">${e.crit} ${e.crit === 1 ? 'alerta' : 'alertas'}</span>` : e.geral != null ? '<span class="ptag good">Sem alertas</span>' : '<span class="ptag">Poucas respostas</span>';
+  const meta = kind === 'place' ? `${KIND_NAME[e.kind] || ''} · ${e.raters} ${e.raters === 1 ? 'avaliação' : 'avaliações'}` : `Empresa · ${e.places} ${e.places === 1 ? 'local' : 'locais'} · ${e.raters} ${e.raters === 1 ? 'avaliação' : 'avaliações'}`;
+  return `<button class="ecard" data-action="${kind === 'place' ? 'open-place' : 'open-company'}" data-id="${e.id}"><span class="sgl av${hue(e.name)}">${esc(sigla(e.name))}</span><span class="einfo"><b>${esc(e.name)}</b><span class="muted small">${meta}</span>${alert}</span>${ring(e.geral)}</button>`;
+}
+function entityList() {
+  const comp = ui.atab === 'empresas', q = normQ(ui.aq || '');
+  let list = (comp ? ui.companies : ui.places) || [];
+  if (q) list = list.filter((e) => normQ(e.name).includes(q));
+  if (ui.asort === 'alertas') list = list.filter((e) => e.crit > 0).sort((a, b) => b.crit - a.crit);
+  else if (ui.asort === 'melhores') list = list.filter((e) => e.geral != null).sort((a, b) => b.geral - a.geral);
+  return list.map((e) => entityCard(comp ? 'company' : 'place', e)).join('') || `<p class="muted small center pad8">${q ? 'Nada encontrado. Toque em "Avaliar" para cadastrar.' : comp ? 'Nenhuma empresa avaliada ainda.' : 'Nenhum local avaliado aqui ainda.'}</p>`;
+}
+function avalSection() {
+  const comp = ui.atab === 'empresas';
+  const sorts = [['mais', 'Mais avaliados'], ['alertas', 'Com alertas'], ['melhores', 'Melhores']].map(([v, l]) => `<button type="button" class="chip2 ${ui.asort === v ? 'on' : ''}" data-action="asort" data-v="${v}">${l}</button>`).join('');
+  return `<div class="searchbar">${ic('search', 18)}<input id="aq" type="search" placeholder="Buscar hospital, UPA ou empresa" value="${esc(ui.aq || '')}" autocomplete="off" enterkeyhint="search"></div>
+    <div class="segtabs"><button class="${comp ? '' : 'on'}" data-action="atab" data-v="locais">Locais</button><button class="${comp ? 'on' : ''}" data-action="atab" data-v="empresas">Empresas</button></div>
+    <div class="chips" role="group" aria-label="Ordenar">${sorts}</div>
+    <div id="alist">${entityList()}</div>`;
+}
+function psheet(label, inner) {
+  return `<div class="overlay" data-action="close-modal"><div class="sheet psheet" role="dialog" aria-label="${esc(label)}" data-stop="1"><div class="cover"></div><button class="ghost cclose" data-action="close-modal" aria-label="Fechar">${ic('x', 22)}</button>${inner}</div></div>`;
+}
+function topicBar(m, t) {
+  if (!t || !t.visible) return `<div class="tp"><div class="tph"><span>${m[1]}</span><span class="muted small">poucas respostas</span></div></div>`;
+  const yn = m[2] === 'yn';
+  const val = yn ? (t.state === 'crit' ? m[3][1] : t.state === 'good' ? m[3][0] : m[3][2]) : wordOf(t.avg);
+  const w = yn ? t.pctNao : Math.round((t.avg / 5) * 100);
+  const cls = yn ? (t.state === 'crit' ? 'bad' : t.state === 'good' ? 'good' : 'mid') : scoreCls(t.avg);
+  return `<div class="tp"><div class="tph"><span>${m[1]}</span><b class="${cls}">${val}</b></div><div class="tbar"><i class="${cls}" style="width:${Math.max(4, w)}%"></i></div><div class="muted small">${yn ? `${t.pctNao}% dizem que não · ` : ''}${t.n} ${t.n === 1 ? 'resposta' : 'respostas'}</div></div>`;
+}
+function alertBoxes(topics, metas) {
+  const crit = metas.filter((m) => topics[m[0]] && topics[m[0]].state === 'crit');
+  const good = metas.filter((m) => topics[m[0]] && topics[m[0]].state === 'good');
+  const ct = (m) => { const t = topics[m[0]]; return m[2] === 'yn' ? `${m[4]} (${t.pctNao}%)` : `${m[1]}: ${wordOf(t.avg)}`; };
+  const gt = (m) => { const t = topics[m[0]]; return m[2] === 'yn' ? `${m[1].replace('?', '')}: sim (${t.pctSim}%)` : `${m[1]}: ${wordOf(t.avg)}`; };
+  return `${crit.length ? `<div class="critbox"><b>${crit.length} ${crit.length === 1 ? 'ponto crítico' : 'pontos críticos'}</b>${crit.map((m) => `<div>${esc(ct(m))}</div>`).join('')}</div>` : ''}${good.length ? `<div class="goodbox"><b>Pontos bons</b>${good.map((m) => `<div>${esc(gt(m))}</div>`).join('')}</div>` : ''}`;
 }
 function modalPlace() {
-  const d = ui.place; if (!d) return sheet('Local', '<p class="muted small">Carregando…</p>');
-  const { place, topics, mine } = d;
-  const crit = TOPIC_META.filter(([k]) => topics[k] && topics[k].state === 'crit');
-  const good = TOPIC_META.filter(([k]) => topics[k] && topics[k].state === 'good');
-  const critTxt = (m) => { const t = topics[m[0]]; return m[2] === 'yn' ? `${m[4]} (${t.pctNao}%)` : `${m[1]}: ${wordOf(t.avg)}`; };
-  const goodTxt = (m) => { const t = topics[m[0]]; return m[2] === 'yn' ? `${m[1].replace('?', '')}: sim (${t.pctSim}%)` : `${m[1]}: ${wordOf(t.avg)}`; };
-  const bar = (m) => {
-    const t = topics[m[0]];
-    if (!t || !t.visible) return `<div class="tp"><div class="tph"><span>${m[1]}</span><span class="muted small">poucas respostas</span></div></div>`;
-    const pct = m[2] === 'yn' ? t.pctNao : null;
-    const val = m[2] === 'yn' ? (t.state === 'crit' ? m[3][1] : t.state === 'good' ? m[3][0] : m[3][2]) : wordOf(t.avg);
-    const w = m[2] === 'yn' ? t.pctNao : Math.round((t.avg / 5) * 100);
-    const cls = m[2] === 'yn' ? (t.state === 'crit' ? 'bad' : t.state === 'good' ? 'good' : 'mid') : scoreCls(t.avg);
-    return `<div class="tp"><div class="tph"><span>${m[1]}</span><b class="${cls}">${val}</b></div><div class="tbar"><i class="${cls}" style="width:${Math.max(4, w)}%"></i></div><div class="muted small">${m[2] === 'yn' ? `${pct}% dizem que não · ` : ''}${t.n} ${t.n === 1 ? 'resposta' : 'respostas'}</div></div>`;
-  };
-  return sheet(place.name, `<div class="phead2"><div class="muted small">${KIND_NAME[place.kind] || ''} · ${place.raters} ${place.raters === 1 ? 'pessoa avaliou' : 'pessoas avaliaram'} · avaliações anônimas</div>
-    ${d.place.geral != null ? `<div class="gbox"><span>Geral</span><b>${String(d.place.geral).replace('.', ',')}</b></div>` : ''}</div>
-    ${crit.length ? `<div class="critbox"><b>${crit.length} ${crit.length === 1 ? 'ponto crítico' : 'pontos críticos'}</b>${crit.map((m) => `<div>${esc(critTxt(m))}</div>`).join('')}</div>` : ''}
-    ${good.length ? `<div class="goodbox"><b>Pontos bons</b>${good.map((m) => `<div>${esc(goodTxt(m))}</div>`).join('')}</div>` : ''}
-    ${d.place.geral == null ? '<p class="muted small">Cada assunto só aparece depois de 3 respostas, para proteger quem avalia.</p>' : ''}
-    <div class="tps">${TOPIC_META.map(bar).join('')}</div>
-    <button class="btn" data-action="rate-place" data-id="${place.id}">${Object.keys(mine).length ? 'Mudar minha avaliação' : 'Avaliar este local'}</button>`);
+  const d = ui.place; if (!d) return psheet('Local', '<p class="muted small" style="margin-top:50px">Carregando…</p>');
+  const { place, topics } = d, tab = ui.ptab || 'resumo';
+  const direct = PAYM.filter((m) => topics[m[0]] && topics[m[0]].visible);
+  const body = tab === 'empresas'
+    ? (d.companies.length ? d.companies.map((c) => { const crit = PAYM.filter((m) => c.topics[m[0]] && c.topics[m[0]].state === 'crit').map((m) => m[4]); const good = PAYM.filter((m) => c.topics[m[0]] && c.topics[m[0]].state === 'good').length; return `<button class="ecard" data-action="open-company" data-id="${c.id}" data-place="${place.id}"><span class="sgl av${hue(c.name)}">${esc(sigla(c.name))}</span><span class="einfo"><b>${esc(c.name)}</b>${crit.length ? `<span class="small redtxt">${esc(crit.join(' · '))}</span>` : good ? '<span class="small goodtxt">Sem alertas de pagamento</span>' : '<span class="muted small">Poucas respostas</span>'}</span>${ring(c.geral)}</button>`; }).join('') : '<p class="muted small">Nenhuma empresa avaliada neste local ainda. Toque em "Avaliar" e informe quem contrata você.</p>')
+    : tab === 'atrasos'
+      ? (d.delays ? `<div class="stat red"><div class="small">Relatos sobre este local</div><div class="n">${d.delays.total}</div></div>${d.delays.avgDays ? `<p class="muted small">Atraso médio de salário: ${d.delays.avgDays} dias.</p>` : ''}` : '<p class="muted small">Ainda não há relatos suficientes sobre este local. Aparecem com 3 relatos ou mais, para proteger quem relata.</p>') + '<button class="btn out" data-action="new-delay">Relatar atraso</button>'
+      : `${alertBoxes(topics, [...LOCM, ...PAYM])}<div class="tps">${LOCM.map((m) => topicBar(m, topics[m[0]])).join('')}${direct.length ? `<div class="usec">Contratação direta</div>${direct.map((m) => topicBar(m, topics[m[0]])).join('')}` : ''}</div>${place.geral == null ? '<p class="muted small">Cada assunto só aparece depois de 3 respostas, para proteger quem avalia.</p>' : ''}`;
+  return psheet(place.name, `<div class="prow2"><span class="sgl big av${hue(place.name)}">${esc(sigla(place.name))}</span>${ring(place.geral, 58)}</div>
+    <h3 class="ptitle">${esc(place.name)}</h3><div class="muted small">${KIND_NAME[place.kind] || ''} · ${place.raters} ${place.raters === 1 ? 'avaliação' : 'avaliações'} · ${d.companies.length} ${d.companies.length === 1 ? 'empresa contrata' : 'empresas contratam'} aqui</div>
+    <div class="row gap8" style="margin:12px 0"><button class="btn gold" style="flex:1" data-action="rate-place" data-id="${place.id}">Avaliar</button><button class="btn out" style="flex:1" data-action="watch" data-kind="place" data-id="${place.id}">${d.watching ? 'Acompanhando' : 'Acompanhar'}</button></div>
+    <div class="ptabs">${[['resumo', 'Resumo'], ['empresas', 'Empresas'], ['atrasos', 'Atrasos']].map(([v, l]) => `<button class="${tab === v ? 'on' : ''}" data-action="ptab" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="pbody">${body}</div>`);
+}
+function modalCompany() {
+  const d = ui.company; if (!d) return psheet('Empresa', '<p class="muted small" style="margin-top:50px">Carregando…</p>');
+  const { company, topics } = d;
+  return psheet(company.name, `<div class="prow2"><span class="sgl big av${hue(company.name)}">${esc(sigla(company.name))}</span>${ring(company.geral, 58)}</div>
+    <h3 class="ptitle">${esc(company.name)}</h3><div class="muted small">Empresa terceirizada · atua em ${d.places.length} ${d.places.length === 1 ? 'local' : 'locais'} · ${company.raters} ${company.raters === 1 ? 'avaliação' : 'avaliações'}</div>
+    <div class="row gap8" style="margin:12px 0"><button class="btn out" style="flex:1" data-action="watch" data-kind="company" data-id="${company.id}">${d.watching ? 'Acompanhando' : 'Acompanhar'}</button></div>
+    ${alertBoxes(topics, PAYM)}<div class="tps">${PAYM.map((m) => topicBar(m, topics[m[0]])).join('')}</div>
+    ${company.geral == null ? '<p class="muted small">Cada assunto só aparece depois de 3 respostas, para proteger quem avalia.</p>' : ''}
+    <div class="usec">Onde atua</div>${d.places.map((pl) => `<button class="lrow" data-action="open-place" data-id="${pl.id}"><span><b>${esc(pl.name)}</b><br><span class="muted small">${KIND_NAME[pl.kind] || ''}</span></span>${ic('chev', 18)}</button>`).join('') || '<p class="muted small">Ainda sem locais.</p>'}`);
+}
+/* avaliar: primeiro escolhe o local e quem contrata, depois uma pergunta por tela */
+function modalPick() {
+  const rt = ui.rt, q = normQ(rt.pname || ''), cq = normQ(rt.cname || '');
+  const psug = !rt.placeId && q.length >= 2 ? (ui.places || []).filter((p) => normQ(p.name).includes(q)).slice(0, 4) : [];
+  const csug = rt.employer === 'company' && cq.length >= 2 ? (ui.companies || []).filter((c) => normQ(c.name).includes(cq)).slice(0, 4) : [];
+  const sugRow = (act, e, extra = '') => `<button type="button" class="lrow" data-action="${act}" data-id="${e.id}">${`<span><b>${esc(e.name)}</b><br><span class="muted small">${extra} já avaliado</span></span>`}${ic('chev', 18)}</button>`;
+  return sheet('Avaliar', `
+    ${rt.placeId ? `<div class="muted small">Local</div><div class="fixedname">${esc(rt.pname)}</div>` : `<div class="muted small">Qual é o local?</div>
+      <div class="chips" role="group" aria-label="Tipo do local">${['hospital', 'upa', 'clinica', 'outro'].map((v) => `<button type="button" class="chip2 ${rt.kind === v ? 'on' : ''}" data-action="pick-kind" data-v="${v}">${KIND_NAME[v]}</button>`).join('')}</div>
+      <label>Nome do local<input id="pickName" maxlength="80" placeholder="Ex.: Hospital Santa Maria" value="${esc(rt.pname || '')}" autocomplete="off"></label>
+      <div id="pickSug">${psug.map((p) => sugRow('pick-existing', p, KIND_NAME[p.kind] + ' ·')).join('')}</div>`}
+    <div class="muted small" style="margin-top:10px">Quem contrata você?</div>
+    <div class="chips" role="group" aria-label="Quem contrata"><button type="button" class="chip2 ${rt.employer === 'company' ? 'on' : ''}" data-action="pick-emp" data-v="company">Empresa terceirizada</button><button type="button" class="chip2 ${rt.employer === 'direct' ? 'on' : ''}" data-action="pick-emp" data-v="direct">O próprio local</button></div>
+    ${rt.employer === 'company' ? `<label>Nome da empresa<input id="pickCo" maxlength="80" placeholder="Ex.: Empresa que assina sua carteira" value="${esc(rt.cname || '')}" autocomplete="off"></label><div id="pickCoSug">${csug.map((c) => sugRow('pick-co', c, 'Empresa ·')).join('')}</div>` : ''}
+    <p class="muted small">Você responde primeiro sobre ${rt.employer === 'company' ? 'a empresa' : 'a contratação'} (piso, jornada, pagamento) e depois sobre o local. É anônimo e dá para pular perguntas.</p>
+    <div class="error" id="formError" role="alert"></div>
+    <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" data-action="pick-go">Começar</button></div>`);
 }
 function modalRate() {
-  const d = ui.place; if (!d) return sheet('Avaliar', '<p class="muted small">Carregando…</p>');
-  const mine = d.mine || {};
-  const row = (m) => {
-    const [k, label, kind, opts] = m;
-    const v = mine[k];
-    const ctl = kind === 'yn'
-      ? [[5, opts[0], 'good'], [1, opts[1], 'bad'], [3, opts[2], 'mid']].map(([val, l, c]) => `<button type="button" class="rb ${c} ${v === val ? 'on' : ''}" data-action="rate" data-t="${k}" data-v="${val}">${l}</button>`).join('')
-      : WORDS.map((w, i) => `<button type="button" class="rb s${i + 1} ${v === i + 1 ? 'on' : ''}" data-action="rate" data-t="${k}" data-v="${i + 1}">${w}</button>`).join('');
-    return `<div class="rrow"><div class="rlabel">${label}</div><div class="rbtns ${kind}">${ctl}</div></div>`;
-  };
-  return sheet(d.place.name, `<p class="muted small">Responda só o que você sabe e pule o resto. Toque de novo para tirar a resposta. É anônimo.</p>
-    ${TOPIC_META.map(row).join('')}
-    <button class="btn" data-action="rate-done">Concluir</button>`);
+  const rt = ui.rt; if (!rt || !rt.steps) return sheet('Avaliar', '<p class="muted small">Carregando…</p>');
+  const st = rt.steps[rt.i], n = rt.steps.length, m = st.m, v = (st.target === 'company' ? rt.mineC : rt.mineP)[m[0]];
+  const opts = m[2] === 'yn'
+    ? [[5, m[3][0], 'good'], [1, m[3][1], 'bad'], [3, m[3][2], 'mid']].map(([val, l, c]) => `<button type="button" class="ropt ${c} ${v === val ? 'on' : ''}" data-action="rstep" data-v="${val}">${l}</button>`).join('')
+    : WORDS.map((w, i) => `<button type="button" class="ropt s${i + 1} ${v === i + 1 ? 'on' : ''}" data-action="rstep" data-v="${i + 1}">${w}</button>`).join('');
+  const who = st.target === 'company' ? `Sobre ${rt.cname}` : st.target === 'direct' ? 'Sobre a contratação' : `Sobre ${rt.pname}`;
+  return sheet('Avaliar', `<div class="prog">${rt.steps.map((_, i) => `<i class="${i <= rt.i ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="muted small">${esc(who)} · ${rt.i + 1} de ${n}</div>
+    <div class="rq">${m[1]}</div><div class="ropts">${opts}</div>
+    <div class="row between rnav"><button class="linkbtn" data-action="rback" ${rt.i === 0 ? 'disabled' : ''}>Voltar</button><button class="linkbtn" data-action="rskip">${rt.i === n - 1 ? 'Concluir' : 'Pular'}</button></div>`);
 }
-function modalPick() {
-  const q = normQ(ui.pickName || ''), all = ui.places || [];
-  const sug = q.length >= 2 ? all.filter((p) => normQ(p.name).includes(q)).slice(0, 4) : [];
-  return sheet('Avaliar local', `<div class="chips" role="group" aria-label="Tipo do local">${['hospital', 'upa', 'clinica', 'outro'].map((v) => `<button type="button" class="chip2 ${ui.pickKind === v ? 'on' : ''}" data-action="pick-kind" data-v="${v}">${KIND_NAME[v]}</button>`).join('')}</div>
-    <label>Nome do local<input id="pickName" maxlength="80" placeholder="Ex.: Hospital Santa Maria" value="${esc(ui.pickName || '')}" autocomplete="off"></label>
-    <div id="pickSug">${sug.map((p) => `<button type="button" class="lrow" data-action="open-rate" data-id="${p.id}"><span><b>${esc(p.name)}</b><br><span class="muted small">${KIND_NAME[p.kind] || ''} · já avaliado</span></span>${ic('chev', 18)}</button>`).join('')}</div>
-    <div class="error" id="formError" role="alert"></div>
-    <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" data-action="pick-go">Continuar</button></div>`);
+async function openPlace(id) { ui.place = null; ui.ptab = 'resumo'; openOver('place'); ui.place = await Store.place(id); if (ui.modal === 'place') render(); }
+async function refreshLists() {
+  try { const sc = scopeOf(ui.view === 'seguindo' ? 'mine' : ui.view); const [a, b] = await Promise.all([Store.places(sc), Store.companies()]); ui.places = a.places; ui.companies = b.companies; } catch { /* ignorado */ }
 }
-const normQ = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-async function loadPlace(id) { ui.place = null; render(); ui.place = await Store.place(id); }
-async function refreshPlaces() { try { const r = await Store.places(scopeOf(ui.view === 'seguindo' ? 'mine' : ui.view)); ui.places = r.places; } catch { /* ignorado */ } }
+function buildSteps(rt) {
+  const pay = PAYM.map((m) => ({ m, target: rt.employer === 'company' ? 'company' : 'direct' }));
+  return [...pay, ...LOCM.map((m) => ({ m, target: 'place' }))];
+}
+async function finishRate() {
+  const id = ui.rt.placeId; ui.rt = null;
+  await refreshLists();
+  ui.place = await Store.place(id); ui.ptab = 'resumo'; ui.modal = 'place'; render(); toast('Avaliação salva. Obrigado!');
+}
 
 const RIGHTS = [
   ['Jornada de trabalho', 'A Lei 7.394/1985 prevê jornada de 24 horas semanais para os profissionais das técnicas radiológicas. Se o seu contrato é diferente, anote horários e guarde comprovantes.'],
@@ -656,14 +715,14 @@ const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignora
 const popSilently = () => { ui.skipPop = 1; history.back(); };
 function openModal(m) { ui.modal = m; pushH(); render(); }
 function openOver(m) { (ui.stk = ui.stk || []).push(ui.modal); openModal(m); }
-function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
-function closeModal() { if (ui.modal) { ui.modal = backModal(); popSilently(); } render(); }
+function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
+function closeModal() { if (ui.modal) { ui.modal = backModal(); if (!ui.modal) ui.stk = []; popSilently(); } render(); }
 function openRootModal(html) { document.getElementById('modalRoot').innerHTML = html; ui.rootModal = true; pushH(); }
 function closeRootModal() { document.getElementById('modalRoot').innerHTML = ''; if (ui.rootModal) { ui.rootModal = false; popSilently(); } }
 window.addEventListener('popstate', () => {
   if (ui.skipPop) { ui.skipPop = 0; return; }
   if (ui.rootModal) { document.getElementById('modalRoot').innerHTML = ''; ui.rootModal = false; return; }
-  if (ui.modal) { ui.modal = backModal(); return render(); }
+  if (ui.modal) { ui.modal = backModal(); if (!ui.modal) ui.stk = []; return render(); }
   if (!ui.user) {
     if (ui.screen === 'signup' && ui.signupStep === 2) ui.signupStep = 1;
     else if (ui.screen !== 'welcome') ui.screen = 'welcome';
@@ -675,14 +734,14 @@ window.addEventListener('popstate', () => {
 
 function render() {
   document.body.classList.toggle('dark-welcome', !ui.user);
-  document.body.classList.toggle('noscroll', ui.modal === 'notifs' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
+  document.body.classList.toggle('noscroll', ui.modal === 'notifs' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
   if (!ui.user) {
     $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -699,9 +758,9 @@ async function refresh({ quiet = false } = {}) {
       if (seq !== ui.seq) return;
       ui.posts = posts.posts; ui.more = posts.more; if (posts.announcement !== undefined) ui.announcement = posts.announcement;
     } else if (ui.tab === 'atrasos') {
-      const [stats, pl] = await Promise.all([Store.stats(scope), Store.places(scope).catch(() => ({ places: [] }))]);
+      const [stats, pl, co] = await Promise.all([Store.stats(scope), Store.places(scope).catch(() => ({ places: [] })), Store.companies().catch(() => ({ companies: [] }))]);
       if (seq !== ui.seq) return;
-      ui.stats = stats; ui.places = pl.places;
+      ui.stats = stats; ui.places = pl.places; ui.companies = co.companies;
     } else if (ui.tab === 'direitos') {
       render();
       if (Store.mode === 'api') { try { ui.union = await Store.union(); if (ui.tab === 'direitos') render(); } catch { /* ignorado */ } }
@@ -856,27 +915,53 @@ document.addEventListener('click', async (ev) => {
       if (ui.tab === 'inicio' && ui.view === 'seguindo') refresh({ quiet: true });
       return;
     }
-    if (a === 'pkind') { ui.pkind = el.dataset.v; return render(); }
-    if (a === 'pick-place') { ui.pickKind = 'hospital'; ui.pickName = ''; openModal('pick'); return; }
-    if (a === 'pick-kind') { ui.pickKind = el.dataset.v; const inp = document.getElementById('pickName'); if (inp) ui.pickName = inp.value; return render(); }
+    if (a === 'asort') { ui.asort = el.dataset.v; return render(); }
+    if (a === 'atab') { ui.atab = el.dataset.v; return render(); }
+    if (a === 'asub') { ui.asub = el.dataset.v; return render(); }
+    if (a === 'pick-place') { ui.rt = { placeId: null, pname: '', kind: 'hospital', employer: 'company', cname: '', companyId: null }; openModal('pick'); return; }
+    if (a === 'pick-kind') { const inp = document.getElementById('pickName'); if (inp) ui.rt.pname = inp.value; ui.rt.kind = el.dataset.v; return render(); }
+    if (a === 'pick-emp') { const i1 = document.getElementById('pickName'), i2 = document.getElementById('pickCo'); if (i1) ui.rt.pname = i1.value; if (i2) ui.rt.cname = i2.value; ui.rt.employer = el.dataset.v; return render(); }
+    if (a === 'pick-existing') { const pl = (ui.places || []).find((x) => x.id === el.dataset.id); if (pl) { ui.rt.placeId = pl.id; ui.rt.pname = pl.name; ui.rt.kind = pl.kind; } return render(); }
+    if (a === 'pick-co') { const c = (ui.companies || []).find((x) => x.id === el.dataset.id); if (c) { ui.rt.companyId = c.id; ui.rt.cname = c.name; } return render(); }
     if (a === 'pick-go') {
-      const inp = document.getElementById('pickName'); ui.pickName = inp ? inp.value : ui.pickName;
-      const name = String(ui.pickName || '').trim().replace(/\s+/g, ' ');
-      if (name.length < 3) return err('Digite o nome do local.');
-      const id = await Store.createPlace(name, ui.pickKind);
-      await loadPlace(id); ui.modal = 'rate'; return render();
+      const rt = ui.rt, i1 = document.getElementById('pickName'), i2 = document.getElementById('pickCo');
+      if (i1) rt.pname = i1.value; if (i2) rt.cname = i2.value;
+      const pname = String(rt.pname || '').trim().replace(/\s+/g, ' '), cname = String(rt.cname || '').trim().replace(/\s+/g, ' ');
+      if (!rt.placeId && pname.length < 3) return err('Digite o nome do local.');
+      if (rt.employer === 'company' && cname.length < 3) return err('Digite o nome da empresa ou escolha "O próprio local".');
+      if (!rt.placeId) rt.placeId = await Store.createPlace(pname, rt.kind);
+      if (rt.employer === 'company') rt.companyId = await Store.createCompany(cname);
+      const [pd, cd] = await Promise.all([Store.place(rt.placeId), rt.employer === 'company' ? Store.company(rt.companyId, rt.placeId) : null]);
+      rt.pname = pd.place.name; rt.mineP = pd.mine || {}; rt.mineC = cd ? cd.mine || {} : {};
+      rt.steps = buildSteps(rt); rt.i = 0; ui.modal = 'rate'; return render();
     }
-    if (a === 'open-rate') { await loadPlace(el.dataset.id); ui.modal = 'rate'; return render(); }
-    if (a === 'open-place') { ui.place = null; openModal('place'); ui.place = await Store.place(el.dataset.id); if (ui.modal === 'place') render(); return; }
-    if (a === 'rate-place') { ui.modal = 'rate'; return render(); }
-    if (a === 'rate') {
-      const d = ui.place, t = el.dataset.t, v = Number(el.dataset.v);
-      const same = d.mine[t] === v, prev = d.mine[t];
-      if (same) delete d.mine[t]; else d.mine[t] = v; render();
-      try { await Store.ratePlace(d.place.id, t, same ? null : v); } catch (e) { if (prev === undefined) delete d.mine[t]; else d.mine[t] = prev; render(); toast(e.message); }
-      return;
+    if (a === 'open-place') { return openPlace(el.dataset.id); }
+    if (a === 'open-company') { ui.company = null; openOver('company'); ui.company = await Store.company(el.dataset.id, el.dataset.place || ''); if (ui.modal === 'company') render(); return; }
+    if (a === 'ptab') { ui.ptab = el.dataset.v; return render(); }
+    if (a === 'watch') {
+      const d = el.dataset.kind === 'company' ? ui.company : ui.place;
+      const r = await Store.watch(el.dataset.kind, el.dataset.id); d.watching = r.watching; render();
+      toast(r.watching ? 'Você vai receber avisos de novas avaliações.' : 'Você deixou de acompanhar.'); return;
     }
-    if (a === 'rate-done') { const id = ui.place.place.id; ui.place = await Store.place(id); await refreshPlaces(); ui.modal = 'place'; render(); toast('Avaliação salva. Obrigado!'); return; }
+    if (a === 'rate-place') {
+      const d = ui.place;
+      ui.rt = { placeId: d.place.id, pname: d.place.name, kind: d.place.kind, employer: d.myCompany ? 'company' : 'company', cname: d.myCompany ? d.myCompany.name : '', companyId: d.myCompany ? d.myCompany.id : null };
+      ui.modal = 'pick'; return render();
+    }
+    if (a === 'rstep' || a === 'rskip' || a === 'rback') {
+      const rt = ui.rt; if (!rt || rt.lock) return;
+      const st = rt.steps[rt.i], mine = st.target === 'company' ? rt.mineC : rt.mineP;
+      const go = () => { rt.lock = false; if (rt.i >= rt.steps.length - 1) { finishRate().catch((e) => toast(e.message)); } else { rt.i += 1; render(); } };
+      if (a === 'rback') { if (rt.i > 0) { rt.i -= 1; render(); } return; }
+      if (a === 'rskip') { return go(); }
+      const val = Number(el.dataset.v), same = mine[st.m[0]] === val, prev = mine[st.m[0]];
+      if (same) delete mine[st.m[0]]; else mine[st.m[0]] = val;
+      render(); rt.lock = true;
+      const call = st.target === 'company' ? Store.rateCompany(rt.companyId, rt.placeId, st.m[0], same ? null : val) : Store.ratePlace(rt.placeId, st.m[0], same ? null : val);
+      try { await call; } catch (e) { if (prev === undefined) delete mine[st.m[0]]; else mine[st.m[0]] = prev; rt.lock = false; render(); toast(e.message); return; }
+      if (same) { rt.lock = false; return; }
+      setTimeout(go, 220); return;
+    }
     if (a === 'union') { try { await Store.toggleUnion(); ui.union = await Store.union(); render(); } catch (e) { toast(e.message); } return; }
     if (a === 'open-announce') { openModal('announce'); return; }
     if (a === 'remove-announce') { if (confirm('Remover o aviso atual?')) { await Store.removeAnnounce(); ui.announcement = null; closeModal(); toast('Aviso removido.'); refresh({ quiet: true }); } return; }
@@ -1201,11 +1286,12 @@ document.addEventListener('input', (ev) => {
   ml.hidden = false;
 });
 document.addEventListener('input', (ev) => {
-  if (ev.target.id !== 'pickName') return;
-  ui.pickName = ev.target.value;
-  const q = normQ(ui.pickName), box = document.getElementById('pickSug'); if (!box) return;
-  const sug = q.length >= 2 ? (ui.places || []).filter((p) => normQ(p.name).includes(q)).slice(0, 4) : [];
-  box.innerHTML = sug.map((p) => `<button type="button" class="lrow" data-action="open-rate" data-id="${p.id}"><span><b>${esc(p.name)}</b><br><span class="muted small">${KIND_NAME[p.kind] || ''} · já avaliado</span></span>${ic('chev', 18)}</button>`).join('');
+  const id = ev.target.id;
+  if (id === 'aq') { ui.aq = ev.target.value; const l = document.getElementById('alist'); if (l) l.innerHTML = entityList(); return; }
+  if (id !== 'pickName' && id !== 'pickCo') return;
+  const rt = ui.rt; if (!rt) return;
+  if (id === 'pickName') { rt.pname = ev.target.value; rt.placeId = null; const q = normQ(rt.pname), box = document.getElementById('pickSug'); if (box) box.innerHTML = (q.length >= 2 ? (ui.places || []).filter((p) => normQ(p.name).includes(q)).slice(0, 4) : []).map((p) => `<button type="button" class="lrow" data-action="pick-existing" data-id="${p.id}"><span><b>${esc(p.name)}</b><br><span class="muted small">${KIND_NAME[p.kind] || ''} · já avaliado</span></span>${ic('chev', 18)}</button>`).join(''); }
+  else { rt.cname = ev.target.value; rt.companyId = null; const q = normQ(rt.cname), box = document.getElementById('pickCoSug'); if (box) box.innerHTML = (q.length >= 2 ? (ui.companies || []).filter((c) => normQ(c.name).includes(q)).slice(0, 4) : []).map((c) => `<button type="button" class="lrow" data-action="pick-co" data-id="${c.id}"><span><b>${esc(c.name)}</b><br><span class="muted small">Empresa · já avaliada</span></span>${ic('chev', 18)}</button>`).join(''); }
 });
 document.addEventListener('pointerdown', (ev) => { if (ev.target.closest('#mlist')) ev.preventDefault(); });
 

@@ -1,4 +1,5 @@
 import { notify, textFor, getVapid } from './notify.js';
+const PAY = ['piso', 'jornada', 'pagamento'];
 /* UniRad - API (Cloudflare Worker + D1). Sem dependências. */
 
 const DAY = 86400000;
@@ -160,6 +161,8 @@ async function deleteAccount(req, env, user) {
     env.DB.prepare('DELETE FROM notifications WHERE user_id = ? OR actor_id = ?').bind(id, id),
     env.DB.prepare('DELETE FROM push_subs WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM place_rates WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM company_rates WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM watch WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM union_support WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id)
@@ -282,6 +285,10 @@ function summarize(rows) {
   const vis = Object.values(out).filter((t) => t.visible);
   const geral = vis.length ? Math.round((vis.reduce((a, t) => a + t.avg, 0) / vis.length) * 10) / 10 : null;
   return { topics: out, geral, crit: vis.filter((t) => t.state === 'crit').length };
+}
+async function notifyWatchers(env, kind, ref, name, byUser) {
+  const w = await env.DB.prepare('SELECT user_id FROM watch WHERE kind = ? AND ref = ? AND user_id != ? LIMIT 200').bind(kind, ref, byUser).all();
+  for (const r of w.results) await notify(env, { to: r.user_id, type: 'placenew', actorName: name, ref, snippet: name });
 }
 const RATE_SQL = 'SELECT place_id, topic, COUNT(*) AS n, AVG(value) AS avg, SUM(value = 1) AS nao, SUM(value = 5) AS sim FROM place_rates';
 
@@ -585,7 +592,16 @@ export default {
         const mine = await env.DB.prepare('SELECT topic, value FROM place_rates WHERE place_id = ? AND user_id = ?').bind(plm[1], user.id).all();
         const raters = (await env.DB.prepare('SELECT COUNT(DISTINCT user_id) AS n FROM place_rates WHERE place_id = ?').bind(plm[1]).first()).n;
         const sm = summarize(rates.results);
-        return json({ place: { ...pl, raters, geral: sm.geral, crit: sm.crit }, topics: sm.topics, mine: Object.fromEntries(mine.results.map((r) => [r.topic, r.value])) });
+        const cos = await env.DB.prepare('SELECT DISTINCT c.id, c.name FROM company_rates r JOIN companies c ON c.id = r.company_id WHERE r.place_id = ? LIMIT 20').bind(plm[1]).all();
+        const cids = cos.results.map((c) => c.id);
+        const crs = cids.length ? await env.DB.prepare(`SELECT company_id AS place_id, topic, COUNT(*) AS n, AVG(value) AS avg, SUM(value = 1) AS nao, SUM(value = 5) AS sim FROM company_rates WHERE company_id IN (${cids.map(() => '?').join(',')}) GROUP BY company_id, topic`).bind(...cids).all() : { results: [] };
+        const cby = {}; for (const r of crs.results) (cby[r.place_id] ||= []).push(r);
+        const companies = cos.results.map((c) => { const cs = summarize(cby[c.id] || []); return { id: c.id, name: c.name, geral: cs.geral, crit: cs.crit, topics: cs.topics }; });
+        const my = await env.DB.prepare('SELECT c.id, c.name FROM company_rates r JOIN companies c ON c.id = r.company_id WHERE r.place_id = ? AND r.user_id = ? LIMIT 1').bind(plm[1], user.id).first();
+        const watching = !!(await env.DB.prepare("SELECT 1 AS x FROM watch WHERE user_id = ? AND kind = 'place' AND ref = ?").bind(user.id, plm[1]).first());
+        const dl = await env.DB.prepare('SELECT COUNT(DISTINCT COALESCE(batch_id, id)) AS n, AVG(CASE WHEN type = \'Salário atrasado\' AND days > 0 THEN days END) AS a FROM delays WHERE LOWER(TRIM(hospital)) = LOWER(TRIM(?))').bind(pl.name).first();
+        const delays = dl.n >= MIN_FOR_HOSPITAL ? { total: dl.n, avgDays: dl.a ? Math.round(dl.a) : 0 } : null;
+        return json({ place: { ...pl, raters, geral: sm.geral, crit: sm.crit }, topics: sm.topics, mine: Object.fromEntries(mine.results.map((r) => [r.topic, r.value])), companies, myCompany: my || null, watching, delays });
       }
       if (plm && plm[2] && m === 'PUT') {
         const b = await readJson(req);
@@ -596,8 +612,68 @@ export default {
         const v = Number(b.value);
         if (!Number.isInteger(v) || (kind === 'scale' ? v < 1 || v > 5 : ![1, 3, 5].includes(v))) throw bad('Nota inválida.');
         await rateLimit(env, 'place_rates', user.id, 150, DAY);
+        const had = await env.DB.prepare('SELECT 1 AS x FROM place_rates WHERE place_id = ? AND user_id = ? AND topic = ?').bind(plm[1], user.id, topic).first();
+        if (!had) { const pn = await env.DB.prepare('SELECT name FROM places WHERE id = ?').bind(plm[1]).first(); if (pn) await notifyWatchers(env, 'place', plm[1], pn.name, user.id); }
         await env.DB.prepare('INSERT INTO place_rates (place_id, user_id, topic, value, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (place_id, user_id, topic) DO UPDATE SET value = excluded.value').bind(plm[1], user.id, topic, v, Date.now()).run();
         return json({ ok: true });
+      }
+      if (p === '/api/companies' && m === 'GET') {
+        const cl = await env.DB.prepare('SELECT id, name, (SELECT COUNT(DISTINCT user_id) FROM company_rates r WHERE r.company_id = companies.id) AS raters, (SELECT COUNT(DISTINCT place_id) FROM company_rates r WHERE r.company_id = companies.id) AS places FROM companies ORDER BY raters DESC, created_at DESC LIMIT 60').all();
+        const ids = cl.results.map((x) => x.id);
+        const rs = ids.length ? await env.DB.prepare(`SELECT company_id AS place_id, topic, COUNT(*) AS n, AVG(value) AS avg, SUM(value = 1) AS nao, SUM(value = 5) AS sim FROM company_rates WHERE company_id IN (${ids.map(() => '?').join(',')}) GROUP BY company_id, topic`).bind(...ids).all() : { results: [] };
+        const by = {}; for (const r of rs.results) (by[r.place_id] ||= []).push(r);
+        return json({ companies: cl.results.map((x) => { const sm = summarize(by[x.id] || []); return { id: x.id, name: x.name, raters: x.raters, places: x.places, geral: sm.geral, crit: sm.crit }; }) });
+      }
+      if (p === '/api/companies' && m === 'POST') {
+        const name = str((await readJson(req)).name, 80);
+        const key = normKey(name);
+        if (name.length < 3 || key.length < 3) throw bad('Digite o nome da empresa.');
+        const ex = await env.DB.prepare('SELECT id FROM companies WHERE name_key = ?').bind(key).first();
+        if (ex) return json({ id: ex.id });
+        await rateLimit(env, 'companies', user.id, 5, DAY);
+        await env.DB.prepare('INSERT OR IGNORE INTO companies (id, name, name_key, user_id, created_at) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), name, key, user.id, Date.now()).run();
+        const row = await env.DB.prepare('SELECT id FROM companies WHERE name_key = ?').bind(key).first();
+        return json({ id: row.id }, 201);
+      }
+      const cpm = p.match(/^\/api\/companies\/([0-9a-f-]{36})(\/rate)?$/);
+      if (cpm && !cpm[2] && m === 'GET') {
+        const c = await env.DB.prepare('SELECT id, name FROM companies WHERE id = ?').bind(cpm[1]).first();
+        if (!c) throw new HttpError(404, 'Empresa não encontrada.');
+        const rs = await env.DB.prepare('SELECT company_id AS place_id, topic, COUNT(*) AS n, AVG(value) AS avg, SUM(value = 1) AS nao, SUM(value = 5) AS sim FROM company_rates WHERE company_id = ? GROUP BY topic').bind(cpm[1]).all();
+        const sm = summarize(rs.results);
+        const pls = await env.DB.prepare('SELECT DISTINCT pl.id, pl.name, pl.kind FROM company_rates r JOIN places pl ON pl.id = r.place_id WHERE r.company_id = ? LIMIT 30').bind(cpm[1]).all();
+        const raters = (await env.DB.prepare('SELECT COUNT(DISTINCT user_id) AS n FROM company_rates WHERE company_id = ?').bind(cpm[1]).first()).n;
+        const pid = url.searchParams.get('place') || '';
+        const mine = /^[0-9a-f-]{36}$/.test(pid) ? await env.DB.prepare('SELECT topic, value FROM company_rates WHERE company_id = ? AND place_id = ? AND user_id = ?').bind(cpm[1], pid, user.id).all() : { results: [] };
+        const watching = !!(await env.DB.prepare("SELECT 1 AS x FROM watch WHERE user_id = ? AND kind = 'company' AND ref = ?").bind(user.id, cpm[1]).first());
+        return json({ company: { ...c, raters, geral: sm.geral, crit: sm.crit }, topics: sm.topics, places: pls.results, mine: Object.fromEntries(mine.results.map((r) => [r.topic, r.value])), watching });
+      }
+      if (cpm && cpm[2] && m === 'PUT') {
+        const b = await readJson(req);
+        const topic = str(b.topic, 20), pid = String(b.place || '');
+        if (!PAY.includes(topic)) throw bad('Assunto inválido.');
+        const c = await env.DB.prepare('SELECT name FROM companies WHERE id = ?').bind(cpm[1]).first();
+        if (!c || !(await env.DB.prepare('SELECT 1 AS x FROM places WHERE id = ?').bind(pid).first())) throw new HttpError(404, 'Não encontrado.');
+        if (b.value === null) { await env.DB.prepare('DELETE FROM company_rates WHERE company_id = ? AND place_id = ? AND user_id = ? AND topic = ?').bind(cpm[1], pid, user.id, topic).run(); return json({ ok: true }); }
+        const v = Number(b.value);
+        if (![1, 3, 5].includes(v)) throw bad('Nota inválida.');
+        await rateLimit(env, 'company_rates', user.id, 150, DAY);
+        const had = await env.DB.prepare('SELECT 1 AS x FROM company_rates WHERE company_id = ? AND place_id = ? AND user_id = ? AND topic = ?').bind(cpm[1], pid, user.id, topic).first();
+        if (!had) await notifyWatchers(env, 'company', cpm[1], c.name, user.id);
+        await env.DB.prepare('INSERT INTO company_rates (company_id, place_id, user_id, topic, value, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (company_id, place_id, user_id, topic) DO UPDATE SET value = excluded.value').bind(cpm[1], pid, user.id, topic, v, Date.now()).run();
+        return json({ ok: true });
+      }
+      if (p === '/api/watch' && m === 'POST') {
+        const b = await readJson(req);
+        const kind = b.kind === 'company' ? 'company' : 'place', ref = String(b.id || '');
+        if (!/^[0-9a-f-]{36}$/.test(ref)) throw bad('Inválido.');
+        const del = await env.DB.prepare('DELETE FROM watch WHERE user_id = ? AND kind = ? AND ref = ?').bind(user.id, kind, ref).run();
+        if (!del.meta.changes) {
+          const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM watch WHERE user_id = ?').bind(user.id).first()).n;
+          if (n >= 200) throw bad('Limite de locais acompanhados atingido.');
+          await env.DB.prepare('INSERT OR IGNORE INTO watch (user_id, kind, ref, created_at) VALUES (?, ?, ?, ?)').bind(user.id, kind, ref, Date.now()).run();
+        }
+        return json({ watching: !del.meta.changes });
       }
       if (p === '/api/announcement' && m === 'POST') {
         if (!user.is_admin) throw new HttpError(403, 'Só a equipe do UniRad publica avisos oficiais.');

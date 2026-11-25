@@ -509,3 +509,41 @@ body:not(.dark-welcome){background:#eef3fb}
 .unioncard{margin-top:14px;padding:14px;border:1px solid #f5b301;background:#fff8e6;border-radius:12px}
 .unioncard b{color:#3b2c00}.unioncard p{font-size:13px;color:#5f4300;margin:4px 0 10px}
 .chip.c-aviso{background:#fff3cf;color:#7a5600}
+
+/* avaliacoes: layout de rede social */
+.searchbar{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:24px;padding:0 14px;min-height:46px;margin-bottom:10px;color:var(--muted)}
+.searchbar input{flex:1;border:0;background:transparent;outline:0;font-size:16px;min-height:44px;color:var(--text)}
+.segtabs{display:flex;background:#dfe7f5;border-radius:12px;padding:3px;margin:0 0 10px}
+.segtabs button{flex:1;min-height:40px;border-radius:10px;font-size:14px;color:#5f6b80;font-weight:500}
+.segtabs button.on{background:#fff;color:var(--navy);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.sgl{flex:none;width:46px;height:46px;border-radius:12px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px}
+.sgl.big{width:60px;height:60px;border:3px solid #fff;font-size:20px;border-radius:14px}
+.sgl.av0{background:#16407a}.sgl.av1{background:#5b3bb0}.sgl.av2{background:#0f6e7a}.sgl.av3{background:#1f7a45}.sgl.av4{background:#7a2a74}.sgl.av5{background:#a35a0a}
+.ecard{display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px;min-height:72px}
+.ecard:active{background:#f4f7fc}
+.einfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.einfo b{font-size:15px;font-weight:600;color:var(--navy);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ptag{font-size:11px;border-radius:8px;padding:2px 8px;background:#e7ecf4;color:#5f6b80}
+.ptag.bad{background:#fcebeb;color:#791f1f}.ptag.good{background:#eaf3de;color:#27500a}
+.ring{flex:none}
+.goodtxt{color:#3b6d11}
+.psheet{position:relative}
+.psheet .cover{height:64px;background:#0b1f3a;margin:-16px -16px 0;border-radius:18px 18px 0 0}
+.cclose{position:absolute;top:8px;right:8px;color:#fff;z-index:2}
+.prow2{display:flex;justify-content:space-between;align-items:flex-end;margin-top:-30px;position:relative}
+.ptitle{margin:8px 0 2px;font-size:19px}
+.ptabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:10px}
+.ptabs button{flex:1;min-height:44px;font-size:14px;color:#5f6b80;font-weight:500;border-bottom:3px solid transparent}
+.ptabs button.on{color:var(--navy);font-weight:700;border-bottom-color:#f5b301}
+.fixedname{font-weight:700;font-size:16px;padding:8px 0 4px;color:var(--navy)}
+.prog{display:flex;gap:4px;margin:2px 0 14px}
+.prog i{flex:1;height:4px;border-radius:2px;background:#e7ecf4}.prog i.on{background:#f5b301}
+.rq{font-size:21px;font-weight:700;color:var(--navy);margin:4px 0 16px}
+.ropts{display:flex;flex-direction:column;gap:8px}
+.ropt{min-height:54px;border-radius:12px;font-size:16px;border:1px solid var(--line);background:#fff;color:#444}
+.ropt.good,.ropt.s4{background:#eaf3de;border-color:#97c459;color:#27500a}.ropt.s5{background:#d6e8c1;border-color:#639922;color:#27500a}
+.ropt.bad,.ropt.s1{background:#fcebeb;border-color:#f09595;color:#791f1f}.ropt.s2{background:#faeeda;border-color:#ef9f27;color:#633806}
+.ropt.on{outline:3px solid var(--navy);outline-offset:-1px;font-weight:700}
+.rnav{margin-top:14px}
+.linkbtn{min-height:44px;padding:0 8px;color:var(--navy);font-weight:600;font-size:15px}
+.linkbtn[disabled]{opacity:.35}
