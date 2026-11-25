@@ -9,17 +9,17 @@ export function emblem({ size = 120, text = true, anim = false } = {}) {
   const [w, h] = vb.split(' ').slice(2).map(Number);
   const height = Math.round(size * h / w);
   const snakeClip = anim
-    ? `<clipPath id="sn${id}"><rect x="355" y="720" width="150" height="0"><animate attributeName="y" begin="indefinite" class="smil" dur="1.1s" values="720;425" keyTimes="0;1" calcMode="spline" keySplines=".4 0 .2 1" fill="freeze"/><animate attributeName="height" begin="indefinite" class="smil" dur="1.1s" values="0;295" keyTimes="0;1" calcMode="spline" keySplines=".4 0 .2 1" fill="freeze"/></rect></clipPath>`
+    ? `<clipPath id="sn${id}"><rect x="355" y="720" width="150" height="0"><animate attributeName="y" begin="indefinite" class="smil" dur="0.66s" values="720;425" keyTimes="0;1" calcMode="spline" keySplines=".4 0 .2 1" fill="freeze"/><animate attributeName="height" begin="indefinite" class="smil" dur="0.66s" values="0;295" keyTimes="0;1" calcMode="spline" keySplines=".4 0 .2 1" fill="freeze"/></rect></clipPath>`
     : `<clipPath id="sn${id}"><rect x="355" y="420" width="150" height="300"/></clipPath>`;
   const textClip = anim
-    ? `<clipPath id="tx${id}"><rect x="422" y="780" width="0" height="120"><animate attributeName="x" begin="indefinite" class="smil" dur=".7s" values="422;230" fill="freeze"/><animate attributeName="width" begin="indefinite" class="smil" dur=".7s" values="0;385" fill="freeze"/></rect></clipPath>`
+    ? `<clipPath id="tx${id}"><rect x="422" y="780" width="0" height="120"><animate attributeName="x" begin="indefinite" class="smil" dur="0.42s" values="422;230" fill="freeze"/><animate attributeName="width" begin="indefinite" class="smil" dur="0.42s" values="0;385" fill="freeze"/></rect></clipPath>`
     : '';
   const t = text ? (anim ? `<g clip-path="url(#tx${id})">${TEXT}</g>` : TEXT) : '';
   return `<svg class="emblem${anim ? ' anim' : ''}" xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${size}" height="${height}" role="img" aria-label="Símbolo da radiologia"><defs>${snakeClip}${textClip}</defs>${BODY.replaceAll('#SNAKE', '#sn' + id)}${t}</svg>`;
 }
 
 /* Dispara os tempos do SMIL (revelação da serpente e do texto) em sincronia com o CSS. */
-export function startSmil(svg, delays = { snake: 2.1, text: 3.0 }) {
+export function startSmil(svg, delays = { snake: 1.26, text: 1.8 }) {
   const a = svg.querySelectorAll('animate.smil');
   const base = svg.getCurrentTime();
   a.forEach((el, i) => { const d = i < 2 ? delays.snake : delays.text; el.beginElementAt(d); });

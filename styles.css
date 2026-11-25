@@ -101,17 +101,17 @@ textarea{resize:vertical}
 
 /* ---------- emblema animado (abertura) ---------- */
 .emblem{display:block;max-width:100%;height:auto;overflow:visible}
-.emblem.anim .p-disc{transform-origin:421px 568px;animation:ePop .7s cubic-bezier(.2,.9,.3,1.15) 0s both}
-.emblem.anim .p-gear{transform-origin:421px 568px;animation:eGear .85s cubic-bezier(.2,.8,.3,1) .45s both}
-.emblem.anim .p-tre{transform-origin:421px 570px;animation:eTre .75s cubic-bezier(.2,.9,.3,1.1) 1s both}
-.emblem.anim .orbit{stroke-dasharray:1;animation:eDraw .85s ease-in-out 1.45s both}
-.emblem.anim .dot{animation:eDot .38s cubic-bezier(.2,1.6,.4,1) both}
-.emblem.anim .d1{transform-origin:326px 555px;animation-delay:1.9s}
-.emblem.anim .d2{transform-origin:452px 636px;animation-delay:2s}
-.emblem.anim .d3{transform-origin:466px 496px;animation-delay:2.1s}
-.emblem.anim .p-rod{animation:eRod .55s cubic-bezier(.2,.9,.3,1) 1.85s both}
-.emblem.anim .snake{transform-origin:425px 712px;animation:eSlither 1.1s ease-in-out 2.1s both}
-.emblem.anim .p-text{animation:eFade .5s ease 3s both}
+.emblem.anim .p-disc{transform-origin:421px 568px;animation:ePop 0.42s cubic-bezier(.2,.9,.3,1.15) 0s both}
+.emblem.anim .p-gear{transform-origin:421px 568px;animation:eGear 0.51s cubic-bezier(.2,.8,.3,1) 0.27s both}
+.emblem.anim .p-tre{transform-origin:421px 570px;animation:eTre 0.45s cubic-bezier(.2,.9,.3,1.1) 0.6s both}
+.emblem.anim .orbit{stroke-dasharray:1;animation:eDraw 0.51s ease-in-out 0.87s both}
+.emblem.anim .dot{animation:eDot 0.23s cubic-bezier(.2,1.6,.4,1) both}
+.emblem.anim .d1{transform-origin:326px 555px;animation-delay:1.14s}
+.emblem.anim .d2{transform-origin:452px 636px;animation-delay:1.2s}
+.emblem.anim .d3{transform-origin:466px 496px;animation-delay:1.26s}
+.emblem.anim .p-rod{animation:eRod 0.33s cubic-bezier(.2,.9,.3,1) 1.11s both}
+.emblem.anim .snake{transform-origin:425px 712px;animation:eSlither 0.66s ease-in-out 1.26s both}
+.emblem.anim .p-text{animation:eFade 0.3s ease 1.8s both}
 @keyframes ePop{from{opacity:0;transform:scale(.15)}to{opacity:1;transform:scale(1)}}
 @keyframes eGear{from{opacity:0;transform:rotate(-100deg) scale(.6)}to{opacity:1;transform:none}}
 @keyframes eTre{from{opacity:0;transform:rotate(-200deg) scale(0)}to{opacity:1;transform:none}}
@@ -124,8 +124,8 @@ textarea{resize:vertical}
 
 .splash{position:fixed;inset:0;z-index:100;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .45s ease}
 .splash.out{opacity:0;pointer-events:none}
-.splash .sname{font-size:30px;font-weight:700;color:#0b1f3a;opacity:0;animation:eFade .6s ease 3.4s both}
-.splash .stag{font-size:15px;color:#5f6b80;opacity:0;animation:eFade .6s ease 3.7s both;margin-top:-8px}
+.splash .sname{font-size:30px;font-weight:700;color:#0b1f3a;opacity:0;animation:eFade 0.36s ease 2.04s both}
+.splash .stag{font-size:15px;color:#5f6b80;opacity:0;animation:eFade 0.36s ease 2.22s both;margin-top:-8px}
 .top .emblem{border-radius:50%;background:var(--card);flex:none}
 
 .top b,.splash .sname,.welcome h1{font-family:"UniBrand",Georgia,serif;font-weight:800}

@@ -1633,7 +1633,7 @@ function showSplash() {
   let done = false;
   const close = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => el.remove(), 400); };
   el.addEventListener('click', close);
-  setTimeout(close, reduce ? 700 : 4700);
+  setTimeout(close, reduce ? 700 : 3000);
 }
 
 (async function start() {
