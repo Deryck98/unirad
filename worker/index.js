@@ -66,11 +66,12 @@ async function currentUser(req, env) {
   const token = getCookie(req, 'unirad_session');
   if (!token) return null;
   const row = await env.DB.prepare(
-    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.avatar, u.is_private, u.is_admin FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
+    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.avatar, u.is_private, u.is_admin, u.verified, u.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.suspended = 0'
   ).bind(await sha256(token), Date.now()).first();
+  if (row && Date.now() - row.last_seen > 3600000) await env.DB.prepare('UPDATE users SET last_seen = ? WHERE id = ?').bind(Date.now(), row.id).run();
   return row || null;
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '', private: !!u.is_private, admin: !!u.is_admin });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '', private: !!u.is_private, admin: !!u.is_admin, verified: !!u.verified });
 
 async function readJson(req) {
   const ct = req.headers.get('content-type') || '';
@@ -133,7 +134,9 @@ async function login(req, env) {
   const salt = u ? u.pass_salt : '00'.repeat(16);
   const hash = await hashPassword(password, salt);
   if (!u || !timingSafeEqual(hash, u.pass_hash)) throw new HttpError(401, 'E-mail ou senha incorretos.');
+  if (u.suspended) throw new HttpError(403, 'Esta conta foi suspensa. Fale com a equipe do UniRad.');
   const token = await createSession(env, u.id);
+  await env.DB.prepare('UPDATE users SET last_seen = ? WHERE id = ?').bind(Date.now(), u.id).run();
   return json({ user: publicUser(u) }, 200, { 'set-cookie': sessionCookie(token, SESSION_DAYS * 86400) });
 }
 
@@ -226,7 +229,7 @@ async function listPosts(url, env, user) {
   const before = Number(url.searchParams.get('before')) || 0;
   const sharedQ = url.searchParams.get('shared') === '1' && !!authorQ;
   const visibleSql = "(SELECT is_private FROM users uu WHERE uu.id = p.user_id) = 0 OR p.user_id = ? OR EXISTS (SELECT 1 FROM follows ff WHERE ff.follower_id = ? AND ff.followee_id = p.user_id AND ff.status = 'ok')";
-  const baseCols = 'p.id, p.cat, p.scope, p.region, p.anon, p.author_name, p.text, p.place, p.salary, p.poll, p.image, p.created_at, p.user_id';
+  const baseCols = 'p.id, p.cat, p.scope, p.region, p.anon, p.author_name, p.text, p.place, p.salary, p.poll, p.image, p.created_at, p.user_id, p.mod_ok';
   let inner, iargs;
   if (sharedQ) {
     inner = `SELECT ${baseCols}, r.user_id AS shared_by, r.created_at AS sort_at FROM reposts r JOIN posts p ON p.id = r.post_id WHERE r.user_id = ?${catSql} AND (${visibleSql})`;
@@ -243,13 +246,13 @@ async function listPosts(url, env, user) {
   const oargs = [user.id, user.id];
   if (before) { beforeSql = ' AND p.sort_at < ?'; oargs.push(before); }
   const rows = await env.DB.prepare(
-    `SELECT p.*, (SELECT avatar FROM users u WHERE u.id = p.user_id) AS avatar, (SELECT name FROM users u WHERE u.id = p.shared_by) AS shared_name,
+    `SELECT p.*, (SELECT avatar FROM users u WHERE u.id = p.user_id) AS avatar, (SELECT verified FROM users u WHERE u.id = p.user_id) AS verified, (SELECT name FROM users u WHERE u.id = p.shared_by) AS shared_name,
       (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes,
       EXISTS (SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked,
       (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id = p.id) AS reposts,
       EXISTS (SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = ?) AS reposted
      FROM (${inner}) p
-     WHERE (SELECT COUNT(*) FROM reports r WHERE r.post_id = p.id) < ${HIDE_AFTER_REPORTS}${beforeSql}
+     WHERE (p.mod_ok = 1 OR (SELECT COUNT(*) FROM reports r WHERE r.post_id = p.id) < ${HIDE_AFTER_REPORTS})${beforeSql}
      ORDER BY p.sort_at DESC LIMIT ${PAGE + 1}`
   ).bind(...oargs.slice(0, 2), ...iargs, ...oargs.slice(2)).all();
   const more = rows.results.length > PAGE;
@@ -283,7 +286,7 @@ async function listPosts(url, env, user) {
     announcement: ann ? { text: ann.text, t: ann.created_at } : null,
     posts: posts.map((p) => ({
       id: p.id, cat: p.cat, scope: p.scope, region: p.region,
-      author: p.anon ? 'Profissional anônimo' : p.author_name, authorId: p.anon ? null : p.user_id, authorAvatar: p.anon ? null : (p.avatar || null), image: p.image || null,
+      author: p.anon ? 'Profissional anônimo' : p.author_name, authorId: p.anon ? null : p.user_id, authorAvatar: p.anon ? null : (p.avatar || null), authorVerified: !p.anon && !!p.verified, image: p.image || null,
       text: p.text, place: p.place || '', salary: p.salary || '', t: p.shared_by ? p.sort_at : p.created_at, origT: p.created_at,
       sharedBy: p.shared_by ? { id: p.shared_by, name: p.shared_name || 'Profissional' } : null, reposts: p.reposts, reposted: !!p.reposted,
       likes: p.likes, liked: !!p.liked, mine: p.user_id === user.id, comments: byId.get(p.id) || [], poll: p.pollOut || null
@@ -497,6 +500,83 @@ async function storyAction(env, user, id, action, m) {
   throw new HttpError(404, 'Não encontrado.');
 }
 
+async function removePost(env, id) {
+  const p = await env.DB.prepare('SELECT image FROM posts WHERE id = ?').bind(id).first();
+  if (!p) return;
+  await dropImage(env, p.image);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)').bind(id),
+    env.DB.prepare('DELETE FROM comments WHERE post_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM likes WHERE post_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM reposts WHERE post_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM reports WHERE post_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM poll_votes WHERE post_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(id)
+  ]);
+}
+
+async function adminApi(req, env, user, p, m, url) {
+  if (!user.is_admin) throw new HttpError(403, 'Só a equipe do UniRad acessa o painel.');
+  const now = Date.now(), n1 = async (sql, ...a) => (await env.DB.prepare(sql).bind(...a).first()).n;
+  if (p === '/api/admin/overview' && m === 'GET') {
+    const series = [];
+    for (let i = 6; i >= 0; i--) series.push(await n1('SELECT COUNT(*) AS n FROM users WHERE created_at > ? AND created_at <= ?', now - (i + 1) * DAY, now - i * DAY));
+    const reg = await env.DB.prepare('SELECT region, COUNT(*) AS n FROM users GROUP BY region ORDER BY n DESC LIMIT 8').all();
+    return json({
+      users: await n1('SELECT COUNT(*) AS n FROM users'), newToday: series[6],
+      active7: await n1('SELECT COUNT(*) AS n FROM users WHERE last_seen > ?', now - 7 * DAY),
+      postsToday: await n1('SELECT COUNT(*) AS n FROM posts WHERE created_at > ?', now - DAY),
+      delays: await n1('SELECT COUNT(*) AS n FROM delays'), delaysToday: await n1('SELECT COUNT(*) AS n FROM delays WHERE created_at > ?', now - DAY),
+      stories: await n1('SELECT COUNT(*) AS n FROM stories WHERE created_at > ?', now - DAY),
+      pending: await n1('SELECT COUNT(*) AS n FROM users WHERE verified = 0 AND suspended = 0 AND is_admin = 0'),
+      reports: await n1('SELECT COUNT(*) AS n FROM posts p WHERE p.mod_ok = 0 AND EXISTS (SELECT 1 FROM reports r WHERE r.post_id = p.id)'),
+      series, regions: reg.results.map((r) => ({ region: r.region, n: r.n }))
+    });
+  }
+  if (p === '/api/admin/reports' && m === 'GET') {
+    const r = await env.DB.prepare(
+      `SELECT p.id, p.text, p.anon, p.author_name, p.user_id, p.region, p.created_at, p.image,
+        (SELECT COUNT(*) FROM reports r WHERE r.post_id = p.id) AS n, (SELECT suspended FROM users u WHERE u.id = p.user_id) AS suspended, (SELECT name FROM users u WHERE u.id = p.user_id) AS real_name
+       FROM posts p WHERE p.mod_ok = 0 AND EXISTS (SELECT 1 FROM reports r WHERE r.post_id = p.id) ORDER BY n DESC, p.created_at DESC LIMIT 50`
+    ).all();
+    return json({ items: r.results.map((x) => ({ id: x.id, text: x.text, anon: !!x.anon, author: x.real_name || x.author_name || 'Profissional', authorId: x.user_id, region: x.region, t: x.created_at, n: x.n, hidden: x.n >= HIDE_AFTER_REPORTS, suspended: !!x.suspended, image: x.image || null })) });
+  }
+  const pm = p.match(/^\/api\/admin\/posts\/([0-9a-f-]{36})\/(keep|delete)$/);
+  if (pm && m === 'POST') {
+    const post = await env.DB.prepare('SELECT user_id FROM posts WHERE id = ?').bind(pm[1]).first();
+    if (!post) throw new HttpError(404, 'Publicação não encontrada.');
+    if (pm[2] === 'keep') { await env.DB.prepare('UPDATE posts SET mod_ok = 1 WHERE id = ?').bind(pm[1]).run(); return json({ ok: true }); }
+    const b = await readJson(req);
+    await removePost(env, pm[1]);
+    if (b.suspend) await setSuspended(env, user, post.user_id, true);
+    return json({ ok: true });
+  }
+  if (p === '/api/admin/users' && m === 'GET') {
+    const q = str(url.searchParams.get('q'), 60).toLowerCase(), f = url.searchParams.get('f') || 'pending';
+    const where = [], args = [];
+    if (f === 'pending') where.push('verified = 0 AND suspended = 0 AND is_admin = 0'); else if (f === 'suspended') where.push('suspended = 1');
+    if (q) { where.push("(LOWER(name) LIKE ? OR LOWER(email) LIKE ? OR LOWER(crtr) LIKE ?)"); const l = `%${q.replace(/[%_]/g, '')}%`; args.push(l, l, l); }
+    const r = await env.DB.prepare(`SELECT id, name, crtr, region, created_at, verified, suspended, is_admin, last_seen FROM users ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC LIMIT 50`).bind(...args).all();
+    return json({ users: r.results.map((u) => ({ id: u.id, name: u.name, crtr: u.crtr, region: u.region, t: u.created_at, verified: !!u.verified, suspended: !!u.suspended, admin: !!u.is_admin, seen: u.last_seen || null })) });
+  }
+  const um = p.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/(verify|suspend)$/);
+  if (um && m === 'POST') {
+    const b = await readJson(req), on = !!b.on;
+    if (um[2] === 'verify') { await env.DB.prepare('UPDATE users SET verified = ? WHERE id = ?').bind(on ? 1 : 0, um[1]).run(); return json({ ok: true }); }
+    await setSuspended(env, user, um[1], on); return json({ ok: true });
+  }
+  throw new HttpError(404, 'Não encontrado.');
+}
+
+async function setSuspended(env, admin, id, on) {
+  if (id === admin.id) throw bad('Você não pode suspender a si mesmo.');
+  const t = await env.DB.prepare('SELECT is_admin FROM users WHERE id = ?').bind(id).first();
+  if (!t) throw new HttpError(404, 'Usuário não encontrado.');
+  if (t.is_admin) throw bad('Não dá para suspender outro administrador.');
+  await env.DB.prepare('UPDATE users SET suspended = ? WHERE id = ?').bind(on ? 1 : 0, id).run();
+  if (on) await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id).run();
+}
+
 async function toggleRepost(env, user, id) {
   const po = await env.DB.prepare('SELECT user_id, text, anon FROM posts WHERE id = ?').bind(id).first();
   if (!po) throw new HttpError(404, 'Publicação não encontrada.');
@@ -685,7 +765,7 @@ export default {
         return json({ ok: true });
       }
       if (um && !um[2] && m === 'GET') {
-        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, avatar, is_private FROM users WHERE id = ?').bind(um[1]).first();
+        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, avatar, is_private, verified FROM users WHERE id = ?').bind(um[1]).first();
         if (!u) throw new HttpError(404, 'Perfil não encontrado.');
         const q = async (sql, ...a) => (await env.DB.prepare(sql).bind(...a).first()).n;
         const me = um[1] === user.id;
@@ -973,6 +1053,7 @@ export default {
         ]);
         return json({ ok: true });
       }
+      if (p.startsWith('/api/admin/')) return await adminApi(req, env, user, p, m, url);
       if (p === '/api/stories' && m === 'GET') return await listStories(env, user);
       if (p === '/api/stories' && m === 'POST') return await createStory(req, env, user);
       const sm = p.match(/^\/api\/stories\/([0-9a-f-]{36})(?:\/(view|zap|views))?$/);

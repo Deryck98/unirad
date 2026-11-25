@@ -104,13 +104,14 @@ function pollHtml(p) {
 }
 
 const findPost = (fn) => (ui.posts || []).find(fn) || (ui.myPosts || []).find(fn) || (ui.mySaved || []).find(fn);
+const vbadge = (v) => (v ? `<span class="vchk" title="CRTR verificado" aria-label="CRTR verificado">${ic('check', 13)}</span>` : '');
 function postCard(p) {
   return `<article class="post">
     <div class="pcol">${avBtn(p.author, p.authorAvatar, p.authorId)}</div>
     <div class="pmain">
       ${p.sharedBy ? `<div class="rehead">${ic('repeat', 15)}<button class="linkname" data-action="view-user" data-id="${p.sharedBy.id}">${esc(p.sharedBy.name)}</button> compartilhou</div>` : ''}
       <div class="phead">
-        <div class="pwho"><span class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}</span>
+        <div class="pwho"><span class="name">${p.authorId ? `<button class="linkname" data-action="view-user" data-id="${p.authorId}">${esc(p.author)}</button>` : esc(p.author)}${vbadge(p.authorVerified)}</span>
           <span class="muted small"> · ${esc(regionLabel(p.region).split(' · ')[0])} · ${ago(p.t)}</span>
           ${p.sample ? '<span class="tag">exemplo</span>' : ''}${p.mine && isAnon(p.author) ? '<span class="tag you">só você sabe</span>' : ''}</div>
         <button class="more" data-action="menu-post" data-id="${p.id}" aria-label="Mais opções">${ic('dots', 20)}</button>
@@ -174,6 +175,45 @@ function modalSharePost() {
     <a class="shrow" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(txt)}" data-action="close-modal"><span class="shic">${ic('share', 20)}</span><span><b>Enviar por WhatsApp</b></span></a>
     <button class="shrow" data-action="copy-link" data-url="${esc(location.origin)}"><span class="shic">${ic('copy', 20)}</span><span><b>Copiar link do app</b></span></button>`);
 }
+/* ---------- Painel do fundador ---------- */
+const ADM_TABS = [['vis', 'Visão'], ['mod', 'Moderação'], ['usr', 'Usuários'], ['avi', 'Avisos']];
+function modalAdmin() {
+  const A = ui.adm || (ui.adm = { tab: 'vis', f: 'pending', q: '' });
+  const tabs = `<div class="utabs adm">${ADM_TABS.map(([k, l]) => `<button class="${A.tab === k ? 'on' : ''}" data-action="adm-tab" data-v="${k}">${l}${k === 'mod' && A.ov && A.ov.reports ? `<i class="cnt">${A.ov.reports}</i>` : ''}</button>`).join('')}</div>`;
+  const load = '<p class="muted small center pad8">Carregando…</p>';
+  const stat = (t, v, s, c) => `<div class="astat"><div class="muted small">${t}</div><div class="av" ${c ? `style="color:${c}"` : ''}>${v}</div>${s ? `<div class="small ok">${s}</div>` : ''}</div>`;
+  let body = '';
+  if (A.tab === 'vis') {
+    const o = A.ov;
+    if (!o) body = load; else {
+      const mx = Math.max(1, ...o.series), tot = Math.max(1, ...o.regions.map((r) => r.n));
+      body = `<div class="agrid">${stat('Usuários', o.users, o.newToday ? `+${o.newToday} hoje` : '')}${stat('Ativos (7 dias)', o.active7, o.users ? Math.round((o.active7 / o.users) * 100) + '%' : '')}${stat('Posts hoje', o.postsToday)}${stat('Relatos de atraso', o.delays, o.delaysToday ? `+${o.delaysToday} hoje` : '', '#c0392b')}${stat('Status ativos', o.stories)}${stat('A conferir', o.pending, 'novos CRTR', '#b26a00')}</div>
+      <div class="acard"><b>Cadastros nos últimos 7 dias</b><div class="abars">${o.series.map((n) => `<div class="ab"><i style="height:${Math.max(4, Math.round((n / mx) * 46))}px"></i><small>${n}</small></div>`).join('')}</div></div>
+      <div class="acard"><b>Usuários por região</b>${o.regions.map((r) => `<div class="areg"><span>${esc(regionLabel(r.region).split(' · ')[0])}</span><div class="atrk"><div style="width:${Math.round((r.n / tot) * 100)}%"></div></div><b>${r.n}</b></div>`).join('') || '<p class="muted small">Sem cadastros ainda.</p>'}</div>`;
+    }
+  } else if (A.tab === 'mod') {
+    const r = A.rep;
+    body = !r ? load : `<p class="muted small">${r.length ? `${r.length} ${r.length > 1 ? 'itens esperando' : 'item esperando'} decisão. Posts com 3 denúncias ficam ocultos até você decidir.` : 'Nada esperando decisão. Tudo em ordem.'}</p>${r.map((x) => `<div class="acard"><div class="arow"><span class="muted small">${x.anon ? 'Anônimo · ' : ''}${esc(x.author)} · ${esc(regionLabel(x.region).split(' · ')[0])}</span><b class="red small">${x.n} ${x.n > 1 ? 'denúncias' : 'denúncia'}${x.hidden ? ' · oculto' : ''}</b></div><p style="margin:8px 0 12px">${esc(x.text).slice(0, 400)}</p>${x.image ? `<img class="aimg" src="${imgUrl(x.image)}" alt="" loading="lazy">` : ''}<div class="arow gap8"><button class="btn out small" data-action="adm-keep" data-id="${x.id}">Manter</button><button class="btn small" data-action="adm-del" data-id="${x.id}">Apagar</button><button class="btn out small danger full" data-action="adm-del" data-id="${x.id}" data-suspend="1" ${x.suspended ? 'disabled' : ''}>${x.suspended ? 'Já suspenso' : 'Apagar e suspender'}</button></div></div>`).join('')}`;
+  } else if (A.tab === 'usr') {
+    const fl = [['pending', 'A conferir'], ['all', 'Todos'], ['suspended', 'Suspensos']];
+    const us = A.us;
+    body = `<input class="asearch" id="admq" type="search" placeholder="Buscar nome, CRTR ou e-mail…" value="${esc(A.q)}" autocomplete="off"><div class="chips">${fl.map(([v, l]) => `<button type="button" class="chip2 ${A.f === v ? 'on' : ''}" data-action="adm-f" data-v="${v}">${l}</button>`).join('')}</div>
+      ${!us ? load : `<div class="acard flush" id="admlist">${us.map((u) => `<button class="aurow ${A.sel === u.id ? 'sel' : ''}" data-action="adm-sel" data-id="${u.id}">${avatar(u.name, '', 'sm')}<span class="aun"><b>${esc(u.name)}</b><small class="muted">CRTR ${esc(u.crtr)} · ${esc(regionLabel(u.region).split(' · ')[0])} · ${ago(u.t)}</small></span><span class="atag ${u.suspended ? 'bad' : u.verified ? 'good' : 'warn'}">${u.suspended ? 'Suspenso' : u.verified ? 'Verificado' : 'Conferir'}</span></button>${A.sel === u.id ? `<div class="aact"><p class="muted small">Confira o CRTR no site do conselho da região. ${u.seen ? 'Visto ' + ago(u.seen) + '.' : ''}</p><div class="arow gap8">${u.admin ? '<span class="muted small">Administrador</span>' : `<button class="btn small" data-action="adm-verify" data-id="${u.id}" data-on="${u.verified ? 0 : 1}">${u.verified ? 'Tirar selo' : 'Marcar verificado'}</button><button class="btn out small danger" data-action="adm-susp" data-id="${u.id}" data-on="${u.suspended ? 0 : 1}">${u.suspended ? 'Reativar' : 'Suspender'}</button>`}</div></div>` : ''}`).join('') || '<p class="muted small pad8">Ninguém encontrado.</p>'}</div>`}`;
+  } else {
+    body = '<p class="muted small">Avisos oficiais aparecem no topo do feed de todos.</p><button class="btn" data-action="open-announce">Publicar aviso do UniRad</button>';
+  }
+  return sheet('Painel do fundador', `${tabs}${body}`);
+}
+async function admLoad(tab) {
+  const A = ui.adm; if (!A) return;
+  try {
+    if (tab === 'vis') A.ov = await Store.adminOverview();
+    else if (tab === 'mod') { A.rep = (await Store.adminReports()).items; if (!A.ov) A.ov = await Store.adminOverview().catch(() => null); }
+    else if (tab === 'usr') A.us = (await Store.adminUsers(A.q, A.f)).users;
+  } catch (e) { toast(e.message); }
+  if (ui.modal === 'admin') render();
+}
+
 function modalLink() {
   const u = ui.linkUrl || '';
   return sheet('Você vai sair do UniRad', `<p class="muted small">Abra só links de quem você confia. Nunca informe senha ou dados de cartão.</p>
@@ -813,7 +853,7 @@ function screenProfile() {
   return `<main class="prof">
     <section class="phero">
       <div class="avwrap">${avatar(u.name, u.avatar, 'xl')}${api ? `<input type="file" id="avatarIn" accept="image/*" hidden><button class="avedit" data-action="change-avatar" aria-label="Trocar foto">${ic('camera', 16)}</button>` : ''}</div>
-      <h2 class="pname">${esc(u.name)}</h2>
+      <h2 class="pname">${esc(u.name)}${vbadge(u.verified)}</h2>
       <div class="muted">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>
       ${u.bio ? `<p class="pbio">${esc(u.bio)}</p>` : ''}
       ${api && u.posts !== undefined ? `<div class="pstats"><div><b>${u.posts}</b><span>${u.posts === 1 ? 'post' : 'posts'}</span></div><div><b>${u.bolts}</b><span>${u.bolts === 1 ? 'raio' : 'raios'}</span></div></div>` : ''}
@@ -825,6 +865,7 @@ function screenProfile() {
       <div class="lrow themerow"><span>Aparência</span><div class="segtabs" role="group" aria-label="Aparência">${[['claro', 'Claro'], ['escuro', 'Escuro'], ['auto', 'Automático']].map(([v, l]) => `<button type="button" class="${getTheme() === v ? 'on' : ''}" data-action="theme" data-v="${v}">${l}</button>`).join('')}</div></div>
       <label class="lrow"><span>Começar posts como anônimo</span><input type="checkbox" class="sw" data-action="toggle-anon" ${u.anon ? 'checked' : ''}></label>
       ${api ? `<label class="lrow"><span>Perfil privado<small class="muted">Só quem você aprovar vê sua bio e publicações.</small></span><input type="checkbox" class="sw" data-action="toggle-private" ${u.private ? 'checked' : ''}></label>
+      ${api && u.admin ? `<button class="lrow" data-action="open-admin"><span>Painel do fundador</span>${ic('chev', 18)}</button>` : ''}
       ${api && u.admin ? `<button class="lrow" data-action="open-announce"><span>Publicar aviso do UniRad</span>${ic('chev', 18)}</button>` : ''}
       ${pushSupported() ? `<label class="lrow"><span>Avisos no celular<small class="muted">${standalone() || !isIOS() ? 'Receba avisos mesmo com o app fechado.' : 'No iPhone, instale o app na tela inicial primeiro.'}</small></span><input type="checkbox" class="sw" data-action="toggle-push" ${ui.pushOn ? 'checked' : ''}></label>` : ''}
       <button class="lrow" data-action="open-followers"><span>Seguidores e pedidos${u.pending ? `<b class="badge">${u.pending}</b>` : ''}</span>${ic('chev', 18)}</button>` : ''}
@@ -1042,7 +1083,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'admin' ? modalAdmin() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom):not(.stv)'); if (ov) ov.classList.add('enter'); }
   ui.prevModal = ui.modal;
@@ -1364,6 +1405,21 @@ document.addEventListener('click', async (ev) => {
       if (!g.stories.length) { closeModal(); loadStories(); return toast('Status apagado.'); }
       if (sv.i >= g.stories.length) sv.i = g.stories.length - 1;
       sv.del = false; showStory(); return toast('Status apagado.');
+    }
+    if (a === 'open-admin') { ui.adm = { tab: 'vis', f: 'pending', q: '' }; openModal('admin'); admLoad('vis'); admLoad('mod'); return; }
+    if (a === 'adm-tab') { ui.adm.tab = el.dataset.v; render(); if (el.dataset.v !== 'avi') admLoad(el.dataset.v); return; }
+    if (a === 'adm-f') { ui.adm.f = el.dataset.v; ui.adm.us = null; ui.adm.sel = null; render(); admLoad('usr'); return; }
+    if (a === 'adm-sel') { ui.adm.sel = ui.adm.sel === el.dataset.id ? null : el.dataset.id; render(); return; }
+    if (a === 'adm-keep') { try { await Store.adminKeep(el.dataset.id); ui.adm.rep = ui.adm.rep.filter((x) => x.id !== el.dataset.id); if (ui.adm.ov) ui.adm.ov.reports = ui.adm.rep.length; render(); toast('Post mantido.'); } catch (e) { toast(e.message); } return; }
+    if (a === 'adm-del') {
+      if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Toque de novo para confirmar'; return; }
+      try { await Store.adminDelete(el.dataset.id, !!el.dataset.suspend); ui.adm.rep = ui.adm.rep.filter((x) => x.id !== el.dataset.id); if (ui.adm.ov) ui.adm.ov.reports = ui.adm.rep.length; render(); toast(el.dataset.suspend ? 'Apagado e autor suspenso.' : 'Post apagado.'); refresh({ quiet: true }); } catch (e) { toast(e.message); }
+      return;
+    }
+    if (a === 'adm-verify') { try { await Store.adminVerify(el.dataset.id, el.dataset.on === '1'); admLoad('usr'); toast(el.dataset.on === '1' ? 'CRTR verificado.' : 'Selo removido.'); } catch (e) { toast(e.message); } return; }
+    if (a === 'adm-susp') {
+      if (el.dataset.on === '1' && !el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Toque de novo para suspender'; return; }
+      try { await Store.adminSuspend(el.dataset.id, el.dataset.on === '1'); ui.adm.sel = null; admLoad('usr'); toast(el.dataset.on === '1' ? 'Usuário suspenso.' : 'Usuário reativado.'); } catch (e) { toast(e.message); } return;
     }
     if (a === 'share-post') { const p = findPost((x) => x.id === el.dataset.id); if (!p) return; ui.sharePost = p; return openModal('sharepost'); }
     if (a === 'repost') {
@@ -1702,6 +1758,12 @@ document.addEventListener('input', (ev) => {
   if (!list.length) { ml.hidden = true; return; }
   ml.innerHTML = list.map((n) => `<button type="button" class="mrow" data-action="pick-mention" data-name="${esc(n)}">${avatar(n, null, 'sm')}<span>${esc(n)}</span></button>`).join('');
   ml.hidden = false;
+});
+let admT = null;
+document.addEventListener('input', (ev) => {
+  if (ev.target.id !== 'admq' || !ui.adm) return;
+  ui.adm.q = ev.target.value; clearTimeout(admT);
+  admT = setTimeout(async () => { try { ui.adm.us = (await Store.adminUsers(ui.adm.q, ui.adm.f)).users; const l = document.getElementById('admlist'); if (ui.modal === 'admin' && l) { const keep = ev.target.selectionStart; render(); const i = document.getElementById('admq'); if (i) { i.focus(); i.setSelectionRange(keep, keep); } } } catch (e) { toast(e.message); } }, 350);
 });
 document.addEventListener('input', (ev) => {
   const id = ev.target.id;
