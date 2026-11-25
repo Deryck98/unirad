@@ -4,7 +4,7 @@ import { emblem, startSmil } from './emblem.js';
 
 const $app = document.getElementById('app');
 let Store = null;
-const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, editPost: null, menu: null, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
+const ui = { tab: 'inicio', view: 'mine', cat: 'tudo', modal: null, open: {}, regionQuery: '', regionPick: null, anonDefault: false, viewUser: null, editPost: null, menu: null, cpost: null, cAnon: false, replyTo: null, rep: {}, photoBlob: null, zoomSrc: '', signupStep: 1, sd: {}, more: false, postCat: 'geral', user: null, screen: 'welcome', stats: null, posts: null, loading: false, seq: 0 };
 
 /* ---------- utilidades ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -41,6 +41,7 @@ const ICONS = {
   poll: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   up: '<polyline points="18 15 12 9 6 15"/>',
   trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  bolt: '<path d="M13 3v7h6l-8 11v-7H5z"/>',
   dots: '<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'
@@ -82,7 +83,6 @@ function pollHtml(p) {
 }
 
 function postCard(p) {
-  const open = ui.open[p.id];
   return `<article class="post">
     <div class="pcol">${avatar(p.author, p.authorAvatar)}</div>
     <div class="pmain">
@@ -98,13 +98,10 @@ function postCard(p) {
       ${pollHtml(p)}
       ${p.place || p.salary ? `<div class="meta">${p.place ? `<span>${ic('briefcase', 14)} ${esc(p.place)}</span>` : ''}${p.salary ? `<span>Salário: ${esc(p.salary)}</span>` : ''}</div>` : ''}
       <div class="actions">
-        <button class="act ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}" aria-label="Curtir">${ic('heart', 20)}<span>${p.likes || ''}</span></button>
-        <button class="act" data-action="toggle-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 20)}<span>${p.comments.length || ''}</span></button>
+        <button class="act ${p.liked ? 'liked' : ''}" data-action="like" data-id="${p.id}" aria-label="Curtir">${ic('bolt', 21)}<span>${p.likes || ''}</span></button>
+        <button class="act" data-action="open-comments" data-id="${p.id}" aria-label="Comentários">${ic('msg', 20)}<span>${p.comments.length || ''}</span></button>
         <button class="act" data-action="share" data-id="${p.id}" aria-label="Compartilhar">${ic('share', 20)}</button>
       </div>
-      ${open ? `<div class="comments">${p.comments.map((c) => `<div class="cm">${avatar(c.author, null, 'sm')}<div class="bubble"><b>${esc(c.author)}</b> <span class="muted small">${ago(c.t)}</span><div>${esc(c.text)}</div></div>${c.mine ? `<button class="more cmore" data-action="menu-comment" data-pid="${p.id}" data-id="${c.id}" aria-label="Opções do comentário">${ic('dots', 18)}</button>` : ''}</div>`).join('') || '<div class="muted small">Seja o primeiro a comentar.</div>'}
-        <form data-form="comment" data-id="${p.id}"><div class="row gap8"><input name="t" maxlength="300" placeholder="Escreva um comentário" required autocomplete="off"><button class="btn small" type="submit">Enviar</button></div>
-          <label class="check mini"><input type="checkbox" name="anon" ${ui.user.anon ? 'checked' : ''}><span>Comentar como anônimo</span></label></form></div>` : ''}
     </div>
   </article>`;
 }
@@ -116,6 +113,57 @@ function menuSheet() {
     ? (Store.mode === 'api' ? it('menu-edit', 'edit', 'Editar') : '') + it('menu-delete', 'trash', 'Apagar', 'danger')
     : it('menu-report', 'flag', 'Denunciar', 'danger');
   return `<div class="overlay" data-action="close-modal"><div class="sheet msheet" role="dialog" aria-label="Opções" data-stop="1" id="msheet"><div class="grab" id="grab"><i></i></div>${items}<button class="mi cancel" data-action="close-modal"><span>Cancelar</span></button></div></div>`;
+}
+
+const rxEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function threadNames(p) {
+  const s = new Set();
+  p.comments.forEach((c) => { if (!isAnon(c.author)) s.add(c.author); });
+  if (!isAnon(p.author)) s.add(p.author);
+  s.delete(ui.user.name);
+  return [...s];
+}
+function mentionHtml(text, names) {
+  const h = esc(text).replace(/\n/g, '<br>');
+  const alt = names.slice().sort((x, y) => y.length - x.length).map((n) => rxEsc(esc(n))).join('|');
+  return h.replace(new RegExp('@(' + (alt ? alt + '|' : '') + '[\\p{L}\\d_]+)', 'gu'), '<span class="mention">@$1</span>');
+}
+function commentsList(p) {
+  const api = Store.mode === 'api';
+  const names = threadNames(p).concat(ui.user.name);
+  const tops = p.comments.filter((c) => !c.parent);
+  const reps = (id) => p.comments.filter((c) => c.parent === id);
+  const one = (c, isRep) => {
+    const rs = isRep ? [] : reps(c.id);
+    return `<div class="cmt ${isRep ? 'rep' : ''}">
+      ${avatar(c.author, null, isRep ? 'sm' : '')}
+      <div class="cbody"><div class="cmeta"><b>${esc(c.author)}</b> <span class="muted">· ${ago(c.t)}</span></div>
+        <div class="ctext">${mentionHtml(c.text, names)}</div>
+        <div class="cacts">${api ? `<button data-action="reply" data-id="${c.id}" data-name="${esc(c.author)}">Responder</button>` : ''}${rs.length ? `<button data-action="toggle-replies" data-id="${c.id}">${ui.rep[c.id] ? 'Ocultar respostas' : `Ver ${rs.length} ${rs.length === 1 ? 'resposta' : 'respostas'}`}</button>` : ''}</div></div>
+      <div class="ccol">${c.mine && api ? `<button class="more cmore" data-action="menu-comment" data-pid="${p.id}" data-id="${c.id}" aria-label="Opções do comentário">${ic('dots', 18)}</button>` : ''}${api ? `<button class="clike ${c.liked ? 'liked' : ''}" data-action="like-comment" data-id="${c.id}" aria-label="Curtir comentário">${ic('bolt', 20)}<span>${c.likes || ''}</span></button>` : ''}</div>
+    </div>${!isRep && ui.rep[c.id] ? rs.map((r) => one(r, true)).join('') : ''}`;
+  };
+  return tops.map((c) => one(c, false)).join('') || '<div class="muted center pad8">Seja o primeiro a comentar.</div>';
+}
+function modalComments() {
+  const p = (ui.posts || []).find((x) => x.id === ui.cpost);
+  if (!p) return '';
+  return `<div class="overlay" data-action="close-modal"><div class="sheet csheet" role="dialog" aria-label="Comentários" data-stop="1" id="csheet">
+    <div class="grab" id="cgrab"><i></i></div><div class="ctitle">Comentários</div>
+    <div class="clist" id="clist">${commentsList(p)}</div>
+    <div class="mlist" id="mlist" hidden></div>
+    <form class="cform" data-form="comment" data-id="${p.id}" novalidate>
+      <div class="replybar" id="replybar" hidden></div>
+      <div class="cinput">${avatar(ui.user.name, ui.user.avatar, 'sm')}
+        <div class="cfield"><input name="t" id="cin" maxlength="300" placeholder="Adicione um comentário…" autocomplete="off" enterkeyhint="send"><button type="button" class="canon ${ui.cAnon ? 'on' : ''}" id="canon" data-action="toggle-canon">anônimo</button></div>
+        <button class="csend" type="submit">Enviar</button></div></form></div></div>`;
+}
+function updateComments() {
+  const p = (ui.posts || []).find((x) => x.id === ui.cpost), l = document.getElementById('clist');
+  if (!p || !l) return;
+  l.innerHTML = commentsList(p);
+  const cs = document.querySelector(`.act[data-action="open-comments"][data-id="${p.id}"] span`);
+  if (cs) cs.textContent = p.comments.length || '';
 }
 
 function composer() {
@@ -398,13 +446,14 @@ function header() {
 const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignorado */ } };
 const popSilently = () => { ui.skipPop = 1; history.back(); };
 function openModal(m) { ui.modal = m; pushH(); render(); }
-function closeModal() { if (ui.modal) { ui.modal = null; popSilently(); } render(); }
+function backModal() { return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
+function closeModal() { if (ui.modal) { ui.modal = backModal(); popSilently(); } render(); }
 function openRootModal(html) { document.getElementById('modalRoot').innerHTML = html; ui.rootModal = true; pushH(); }
 function closeRootModal() { document.getElementById('modalRoot').innerHTML = ''; if (ui.rootModal) { ui.rootModal = false; popSilently(); } }
 window.addEventListener('popstate', () => {
   if (ui.skipPop) { ui.skipPop = 0; return; }
   if (ui.rootModal) { document.getElementById('modalRoot').innerHTML = ''; ui.rootModal = false; return; }
-  if (ui.modal) { ui.modal = null; return render(); }
+  if (ui.modal) { ui.modal = backModal(); return render(); }
   if (!ui.user) {
     if (ui.screen === 'signup' && ui.signupStep === 2) ui.signupStep = 1;
     else if (ui.screen !== 'welcome') ui.screen = 'welcome';
@@ -422,7 +471,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada"><button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -494,20 +543,20 @@ function showPhotoPrev() {
   img.src = URL.createObjectURL(ui.photoBlob);
   document.getElementById('photoPrev').hidden = false; document.getElementById('photoBtn').hidden = true;
 }
-function bindMenuSwipe() {
-  const g = document.getElementById('grab'), s = document.getElementById('msheet');
+function bindMenuSwipe(gid = 'grab', sid = 'msheet', onlyGrab = false) {
+  const g = document.getElementById(gid), s = document.getElementById(sid);
   if (!g || !s) return;
   let y0 = null, dy = 0;
   const end = () => {
     if (y0 === null) return; const d = dy; y0 = null; s.style.transition = 'transform .2s'; 
     if (d > 70) { s.style.transform = 'translateY(100%)'; setTimeout(closeModal, 150); } else s.style.transform = '';
   };
-  s.addEventListener('pointerdown', (e) => { if (e.target.closest('.mi') && !e.target.closest('#grab')) return; y0 = e.clientY; dy = 0; s.style.transition = 'none'; try { s.setPointerCapture(e.pointerId); } catch { /* ok */ } });
+  s.addEventListener('pointerdown', (e) => { if (onlyGrab ? !e.target.closest('#' + gid + ',.ctitle') : (e.target.closest('.mi') && !e.target.closest('#' + gid))) return; y0 = e.clientY; dy = 0; s.style.transition = 'none'; try { s.setPointerCapture(e.pointerId); } catch { /* ok */ } });
   s.addEventListener('pointermove', (e) => { if (y0 === null) return; dy = e.clientY - y0; s.style.transform = `translateY(${dy > 0 ? dy : dy / 4}px)`; });
   s.addEventListener('pointerup', end); s.addEventListener('pointercancel', end);
 }
 function bindModal() {
-  bindMenuSwipe();
+  bindMenuSwipe(); bindMenuSwipe('cgrab', 'csheet', true);
   const pin = document.getElementById('photoIn');
   if (pin) {
     pin.addEventListener('change', async () => {
@@ -629,7 +678,32 @@ document.addEventListener('click', async (ev) => {
       try { await Store.toggleLike(p.id); } catch (e) { flip(); toast(e.message); } finally { delete el.dataset.busy; }
       return;
     }
-    if (a === 'toggle-comments') { ui.open[el.dataset.id] = !ui.open[el.dataset.id]; return render(); }
+    if (a === 'open-comments') {
+      ui.cpost = el.dataset.id; ui.cAnon = !!ui.user.anon; ui.replyTo = null; ui.rep = {};
+      openModal('comments'); const ci = document.getElementById('cin'); if (ci) ci.focus(); return;
+    }
+    if (a === 'reply') {
+      ui.replyTo = { id: el.dataset.id, name: el.dataset.name };
+      const rb = document.getElementById('replybar'), ci = document.getElementById('cin');
+      rb.innerHTML = `<span>Respondendo a <b>${esc(el.dataset.name)}</b></span><button type="button" data-action="cancel-reply" aria-label="Cancelar resposta">${ic('x', 16)}</button>`; rb.hidden = false;
+      ci.value = isAnon(el.dataset.name) ? '' : `@${el.dataset.name} `; ci.focus(); ci.setSelectionRange(ci.value.length, ci.value.length); return;
+    }
+    if (a === 'cancel-reply') { ui.replyTo = null; document.getElementById('replybar').hidden = true; return; }
+    if (a === 'toggle-replies') { ui.rep[el.dataset.id] = !ui.rep[el.dataset.id]; return updateComments(); }
+    if (a === 'toggle-canon') { ui.cAnon = !ui.cAnon; el.classList.toggle('on', ui.cAnon); const ci = document.getElementById('cin'); if (ci) ci.focus(); return; }
+    if (a === 'like-comment') {
+      const p = (ui.posts || []).find((x) => x.id === ui.cpost); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (!c) return;
+      const flip = () => { c.liked = !c.liked; c.likes = Math.max(0, (c.likes || 0) + (c.liked ? 1 : -1)); };
+      flip(); updateComments();
+      try { await Store.likeComment(c.id); } catch (e) { flip(); updateComments(); toast(e.message); }
+      return;
+    }
+    if (a === 'pick-mention') {
+      const ci = document.getElementById('cin'), pos = ci.selectionStart, v = ci.value;
+      const before = v.slice(0, pos).replace(/@([^\s@]*)$/, '@' + el.dataset.name + ' ');
+      ci.value = before + v.slice(pos); ci.setSelectionRange(before.length, before.length);
+      document.getElementById('mlist').hidden = true; ci.focus(); return;
+    }
     if (a === 'report') { if (confirm('Denunciar esta publicação por ofensa ou dados de paciente?')) { await Store.report(el.dataset.id); toast('Denúncia enviada. Obrigado.'); refresh({ quiet: true }); } return; }
     if (a === 'delete-post') { if (confirm('Apagar sua publicação?')) { await Store.deletePost(el.dataset.id); refresh({ quiet: true }); } return; }
     if (a === 'logout') { await Store.logout(); resetSession(); return render(); }
@@ -740,9 +814,17 @@ document.addEventListener('submit', async (ev) => {
       closeModal(); toast('Editado.'); return refresh({ quiet: true });
     }
     if (kind === 'comment') {
-      const t = String(d.get('t') || '').trim(); if (!t) return;
-      await Store.addComment(f.dataset.id, t, !!d.get('anon'));
-      return refresh({ quiet: true });
+      const inp = document.getElementById('cin'), t = inp.value.trim(); if (!t) return;
+      const p = (ui.posts || []).find((x) => x.id === f.dataset.id); if (!p) return;
+      const parent = ui.replyTo ? ui.replyTo.id : null, btn = f.querySelector('.csend');
+      btn.disabled = true;
+      try { await Store.addComment(p.id, t, ui.cAnon, parent); } finally { btn.disabled = false; }
+      inp.value = ''; if (parent) ui.rep[parent] = true; ui.replyTo = null; document.getElementById('replybar').hidden = true;
+      const r = await Store.posts({ scope: scopeOf(ui.view), cat: ui.cat });
+      const np = r.posts.find((x) => x.id === p.id); if (np) p.comments = np.comments;
+      updateComments();
+      const l = document.getElementById('clist'); if (l) l.scrollTop = l.scrollHeight;
+      inp.focus(); return;
     }
     if (kind === 'delete') {
       busy(f, true);
@@ -779,3 +861,16 @@ function showSplash() {
   try { ui.user = await Store.init(); } catch { ui.user = null; }
   if (ui.user) await refresh(); else render();
 })();
+
+/* menções: digitar @ mostra as pessoas da conversa */
+document.addEventListener('input', (ev) => {
+  if (ev.target.id !== 'cin') return;
+  const ml = document.getElementById('mlist'), p = (ui.posts || []).find((x) => x.id === ui.cpost); if (!ml || !p) return;
+  const ci = ev.target, m = ci.value.slice(0, ci.selectionStart).match(/(^|\s)@([^\s@]*)$/);
+  if (!m) { ml.hidden = true; return; }
+  const q = m[2].toLowerCase(), list = threadNames(p).filter((n) => n.toLowerCase().includes(q)).slice(0, 5);
+  if (!list.length) { ml.hidden = true; return; }
+  ml.innerHTML = list.map((n) => `<button type="button" class="mrow" data-action="pick-mention" data-name="${esc(n)}">${avatar(n, null, 'sm')}<span>${esc(n)}</span></button>`).join('');
+  ml.hidden = false;
+});
+document.addEventListener('pointerdown', (ev) => { if (ev.target.closest('#mlist')) ev.preventDefault(); });

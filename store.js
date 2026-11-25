@@ -44,7 +44,8 @@ const api = {
   },
   addPost(p) { return call('POST', '/posts', p); },
   toggleLike(id) { return call('POST', `/posts/${id}/like`); },
-  addComment(id, text, anon) { return call('POST', `/posts/${id}/comments`, { text, anon }); },
+  addComment(id, text, anon, parent) { return call('POST', `/posts/${id}/comments`, { text, anon, parent: parent || undefined }); },
+  likeComment(id) { return call('POST', `/comments/${id}/like`); },
   report(id) { return call('POST', `/posts/${id}/report`); },
   deletePost(id) { return call('DELETE', `/posts/${id}`); },
   editComment(id, text) { return call('PATCH', `/comments/${id}`, { text }); },
@@ -90,6 +91,7 @@ const demo = {
   async deletePost() {},
   async editPost() {},
   async editComment() {},
+  async likeComment() {},
   async deleteComment() {},
   async addDelay(d) { (d.items || []).forEach((it) => L.addDelay({ region: L.user.region, hospital: d.hospital, type: d.type, month: it.month, days: it.days, anon: true })); }
 };

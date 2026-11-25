@@ -145,6 +145,7 @@ async function deleteAccount(req, env, user) {
   for (let i = 0; i < ups.results.length; i += 500) await env.PHOTOS.delete(ups.results.slice(i, i + 500).map((r) => r.key));
   await env.DB.batch([
     env.DB.prepare('DELETE FROM uploads WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM comment_likes WHERE user_id = ? OR comment_id IN (SELECT id FROM comments WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?))').bind(id, id, id),
     env.DB.prepare('DELETE FROM comments WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM likes WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM reports WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
@@ -203,9 +204,12 @@ async function listPosts(url, env, user) {
   if (posts.length) {
     const ids = posts.map((p) => p.id);
     const cm = await env.DB.prepare(
-      `SELECT id, post_id, user_id, anon, author_name, text, created_at FROM comments WHERE post_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at ASC`
-    ).bind(...ids).all();
-    for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at, mine: c.user_id === user.id });
+      `SELECT c.id, c.post_id, c.user_id, c.anon, c.author_name, c.text, c.created_at, c.parent_id,
+        (SELECT COUNT(*) FROM comment_likes l WHERE l.comment_id = c.id) AS likes,
+        EXISTS(SELECT 1 FROM comment_likes l WHERE l.comment_id = c.id AND l.user_id = ?) AS liked
+       FROM comments c WHERE c.post_id IN (${ids.map(() => '?').join(',')}) ORDER BY c.created_at ASC`
+    ).bind(user.id, ...ids).all();
+    for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at, mine: c.user_id === user.id, parent: c.parent_id || null, likes: c.likes, liked: !!c.liked });
     const pollIds = posts.filter((p) => p.poll).map((p) => p.id);
     if (pollIds.length) {
       const q = pollIds.map(() => '?').join(',');
@@ -331,8 +335,14 @@ async function addComment(req, env, user, id) {
   if (!(await postExists(env, id))) throw new HttpError(404, 'Publicação não encontrada.');
   await rateLimit(env, 'comments', user.id, 60, DAY);
   const anon = b.anon === false ? 0 : 1;
-  await env.DB.prepare('INSERT INTO comments (id, post_id, user_id, anon, author_name, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .bind(crypto.randomUUID(), id, user.id, anon, anon ? null : user.name, text, Date.now()).run();
+  let parent = null;
+  if (b.parent) {
+    const pr = await env.DB.prepare('SELECT id, parent_id FROM comments WHERE id = ? AND post_id = ?').bind(String(b.parent), id).first();
+    if (!pr) throw new HttpError(404, 'Comentário não encontrado.');
+    parent = pr.parent_id || pr.id;
+  }
+  await env.DB.prepare('INSERT INTO comments (id, post_id, user_id, anon, author_name, text, created_at, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), id, user.id, anon, anon ? null : user.name, text, Date.now(), parent).run();
   return json({ ok: true }, 201);
 }
 
@@ -347,6 +357,7 @@ async function deletePost(env, user, id) {
   if (!own) throw new HttpError(404, 'Publicação não encontrada.');
   await dropImage(env, own.image);
   await env.DB.batch([
+    env.DB.prepare('DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)').bind(id),
     env.DB.prepare('DELETE FROM comments WHERE post_id = ?').bind(id),
     env.DB.prepare('DELETE FROM likes WHERE post_id = ?').bind(id),
     env.DB.prepare('DELETE FROM reports WHERE post_id = ?').bind(id),
@@ -441,6 +452,14 @@ export default {
       }
 
       const cmm = p.match(/^\/api\/comments\/([0-9a-f-]{36})$/);
+      const clm = p.match(/^\/api\/comments\/([0-9a-f-]{36})\/like$/);
+      if (clm && m === 'POST') {
+        const ex = await env.DB.prepare('SELECT 1 AS x FROM comments WHERE id = ?').bind(clm[1]).first();
+        if (!ex) throw new HttpError(404, 'Comentário não encontrado.');
+        const del = await env.DB.prepare('DELETE FROM comment_likes WHERE comment_id = ? AND user_id = ?').bind(clm[1], user.id).run();
+        if (!del.meta.changes) await env.DB.prepare('INSERT OR IGNORE INTO comment_likes (comment_id, user_id) VALUES (?, ?)').bind(clm[1], user.id).run();
+        return json({ ok: true });
+      }
       if (cmm && m === 'PATCH') {
         const text = str((await readJson(req)).text, 300);
         if (!text) throw bad('Escreva um comentário.');
@@ -449,8 +468,12 @@ export default {
         return json({ ok: true });
       }
       if (cmm && m === 'DELETE') {
-        const r = await env.DB.prepare('DELETE FROM comments WHERE id = ? AND user_id = ?').bind(cmm[1], user.id).run();
-        if (!r.meta.changes) throw new HttpError(404, 'Comentário não encontrado.');
+        const own = await env.DB.prepare('SELECT id FROM comments WHERE id = ? AND user_id = ?').bind(cmm[1], user.id).first();
+        if (!own) throw new HttpError(404, 'Comentário não encontrado.');
+        await env.DB.batch([
+          env.DB.prepare('DELETE FROM comment_likes WHERE comment_id = ? OR comment_id IN (SELECT id FROM comments WHERE parent_id = ?)').bind(own.id, own.id),
+          env.DB.prepare('DELETE FROM comments WHERE id = ? OR parent_id = ?').bind(own.id, own.id),
+        ]);
         return json({ ok: true });
       }
       const pm = p.match(/^\/api\/posts\/([0-9a-f-]{36})(?:\/(like|comments|report|vote))?$/);

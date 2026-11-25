@@ -296,3 +296,36 @@ button.opt.res{width:100%;text-align:left}
 .mi.cancel{justify-content:center;margin-top:6px;background:#eef2f8;color:var(--muted)}
 .cm .cmore{margin:0;min-width:32px;min-height:32px;align-self:center}
 .post .more{color:#6b7690}
+
+/* raio = curtir */
+.actions .act.liked{color:#b8860b}
+.actions .act.liked svg{fill:#f5b301;stroke:#c98f00}
+.csheet{display:flex;flex-direction:column;padding:0;height:85vh;height:85dvh;max-height:85dvh;overflow:hidden}
+.ctitle{text-align:center;font-weight:700;font-size:15px;padding:0 0 10px;border-bottom:1px solid var(--line);touch-action:none}
+.csheet .grab{touch-action:none}
+.clist{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:16px;overscroll-behavior:contain}
+.cmt{display:flex;gap:10px;align-items:flex-start}
+.cmt.rep{margin-left:44px}
+.cbody{flex:1;min-width:0}
+.cmeta{font-size:13px}.cmeta b{font-weight:700}
+.ctext{font-size:15px;line-height:1.4;margin-top:2px;word-break:break-word}
+.mention{color:var(--blue);font-weight:600}
+.cacts{display:flex;gap:16px;margin-top:6px}
+.cacts button{font-size:13px;font-weight:600;color:var(--muted);padding:2px 0;min-height:28px}
+.ccol{display:flex;flex-direction:column;align-items:center;flex:none;min-width:34px}
+.clike{display:flex;flex-direction:column;align-items:center;gap:0;color:var(--muted);min-height:40px;padding:2px 4px;font-size:12px}
+.clike.liked{color:#b8860b}.clike.liked svg{fill:#f5b301;stroke:#c98f00}
+.ccol .cmore{margin:0;min-height:30px}
+.cform{border-top:1px solid var(--line);padding:8px 14px calc(10px + env(safe-area-inset-bottom));background:#fff}
+.replybar{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted);padding:0 2px 6px}
+.replybar button{min-width:32px;min-height:32px;color:var(--muted);display:flex;align-items:center;justify-content:center}
+.cinput{display:flex;align-items:center;gap:10px}
+.cfield{flex:1;display:flex;align-items:center;gap:6px;background:#eef2f8;border-radius:999px;padding:0 6px 0 14px;min-width:0}
+.cfield input{flex:1;min-width:0;border:0;background:transparent;outline:0;min-height:42px;font-size:16px}
+.canon{font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--muted);background:#fff;flex:none}
+.canon.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.csend{color:var(--blue);font-weight:700;font-size:15px;min-height:42px;padding:0 4px}
+.csend:disabled{opacity:.5}
+.mlist{border-top:1px solid var(--line);background:#fff;padding:4px 10px}
+.mlist[hidden]{display:none}
+.mrow{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;text-align:left;font-weight:600;font-size:15px}
