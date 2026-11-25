@@ -192,8 +192,8 @@ function composer() {
 }
 
 function sheet(title, inner) {
-  return `<div class="overlay" data-action="close-modal"><div class="sheet" role="dialog" aria-label="${esc(title)}" data-stop="1">
-    <div class="row between"><h3>${esc(title)}</h3><button class="ghost" data-action="close-modal" aria-label="Fechar">${ic('x')}</button></div>${inner}</div></div>`;
+  return `<div class="overlay" data-action="close-modal"><div class="sheet" role="dialog" aria-label="${esc(title)}" data-stop="1" id="gsheet">
+    <div class="grab" id="grab"><i></i></div><div class="row between"><h3>${esc(title)}</h3><button class="ghost" data-action="close-modal" aria-label="Fechar">${ic('x')}</button></div>${inner}</div></div>`;
 }
 
 const TERMS = `<ul class="rules">
@@ -393,7 +393,7 @@ function avalSection() {
     <div id="alist">${entityList()}</div>`;
 }
 function psheet(label, inner) {
-  return `<div class="overlay" data-action="close-modal"><div class="sheet psheet" role="dialog" aria-label="${esc(label)}" data-stop="1"><div class="cover"></div><button class="ghost cclose" data-action="close-modal" aria-label="Fechar">${ic('x', 22)}</button>${inner}</div></div>`;
+  return `<div class="overlay" data-action="close-modal"><div class="sheet psheet" role="dialog" aria-label="${esc(label)}" data-stop="1" id="gsheet"><div class="cover"></div><button class="ghost cclose" data-action="close-modal" aria-label="Fechar">${ic('x', 22)}</button>${inner}</div></div>`;
 }
 function topicBar(m, t) {
   if (!t || !t.visible) return `<div class="tp"><div class="tph"><span>${m[1]}</span><span class="muted small">poucas respostas</span></div></div>`;
@@ -474,7 +474,7 @@ function buildSteps(rt) {
   return [...pay, ...LOCM.map((m) => ({ m, target: 'place' }))];
 }
 async function finishRate() {
-  const id = ui.rt.placeId; ui.rt = null;
+  const id = ui.rt.placeId; if (ui.rt.fromPlace) { (ui.stk || []).pop(); popSilently(); } ui.rt = null;
   await refreshLists();
   ui.place = await Store.place(id); ui.ptab = 'resumo'; ui.modal = 'place'; render(); toast('Avaliação salva. Obrigado!');
 }
@@ -715,7 +715,7 @@ const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignora
 const popSilently = () => { ui.skipPop = 1; history.back(); };
 function openModal(m) { ui.modal = m; pushH(); render(); }
 function openOver(m) { (ui.stk = ui.stk || []).push(ui.modal); openModal(m); }
-function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
+function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'pick' || ui.modal === 'rate') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
 function closeModal() { if (ui.modal) { ui.modal = backModal(); if (!ui.modal) ui.stk = []; popSilently(); } render(); }
 function openRootModal(html) { document.getElementById('modalRoot').innerHTML = html; ui.rootModal = true; pushH(); }
 function closeRootModal() { document.getElementById('modalRoot').innerHTML = ''; if (ui.rootModal) { ui.rootModal = false; popSilently(); } }
@@ -819,10 +819,10 @@ function showPhotoPrev() {
 }
 function bindSheetDrag(sid, scrollId) {
   const s = document.getElementById(sid); if (!s) return;
-  const sc = scrollId ? document.getElementById(scrollId) : null;
+  const sc = scrollId ? document.getElementById(scrollId) : s;
   let y0 = null, dy = 0, active = false;
   s.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1 || e.target.closest('.cform, .mlist')) { y0 = null; return; }
+    if (e.touches.length !== 1 || e.target.closest('.cform, .mlist, input, textarea, select')) { y0 = null; return; }
     y0 = e.touches[0].clientY; dy = 0; active = false; s.style.transition = 'none';
   }, { passive: true });
   s.addEventListener('touchmove', (e) => {
@@ -857,7 +857,7 @@ function fitSheet() {
 }
 if (window.visualViewport) { window.visualViewport.addEventListener('resize', fitSheet); window.visualViewport.addEventListener('scroll', fitSheet); }
 function bindModal() {
-  bindSheetDrag('msheet'); bindSheetDrag('csheet', 'clist'); fitSheet();
+  bindSheetDrag('msheet'); bindSheetDrag('csheet', 'clist'); bindSheetDrag('gsheet'); fitSheet();
   const pin = document.getElementById('photoIn');
   if (pin) {
     pin.addEventListener('change', async () => {
@@ -946,7 +946,7 @@ document.addEventListener('click', async (ev) => {
     if (a === 'rate-place') {
       const d = ui.place;
       ui.rt = { placeId: d.place.id, pname: d.place.name, kind: d.place.kind, employer: d.myCompany ? 'company' : 'company', cname: d.myCompany ? d.myCompany.name : '', companyId: d.myCompany ? d.myCompany.id : null };
-      ui.modal = 'pick'; return render();
+      ui.rt.fromPlace = true; return openOver('pick');
     }
     if (a === 'rstep' || a === 'rskip' || a === 'rback') {
       const rt = ui.rt; if (!rt || rt.lock) return;
