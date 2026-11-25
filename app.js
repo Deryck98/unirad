@@ -344,12 +344,11 @@ function shortcuts() {
 const storyList = () => { const st = ui.stories; if (!st) return []; return (st.mine.stories.length ? [st.mine] : []).concat(st.groups); };
 function storyBar() {
   if (Store.mode !== 'api' || !ui.user) return '';
-  const st = ui.stories, mine = st ? st.mine : { stories: [] }, list = storyList(), off = mine.stories.length ? 1 : 0;
+  const st = ui.stories, mine = st ? st.mine : { stories: [] }, off = mine.stories.length ? 1 : 0;
   const me = `<div class="stitem"><button class="stav ${mine.stories.length ? 'ring' : 'add'}" data-action="${mine.stories.length ? 'st-open' : 'new-story'}" data-g="0" aria-label="${mine.stories.length ? 'Ver seu status' : 'Criar status'}">${avatar(ui.user.name, ui.user.avatar)}${mine.stories.length ? '' : `<span class="stplus">${ic('plus', 14)}</span>`}</button>${mine.stories.length ? `<button class="stplus out" data-action="new-story" aria-label="Novo status">${ic('plus', 14)}</button>` : ''}<span class="stname">Seu status</span></div>`;
   const others = (st ? st.groups : []).map((g, i) => `<div class="stitem"><button class="stav ring ${g.seen ? 'seen' : ''}" data-action="st-open" data-g="${i + off}" aria-label="Status de ${esc(g.name)}">${g.anon ? `<div class="avatar anonst">${ic('user', 22)}</div>` : avatar(g.name, g.avatar)}</button><span class="stname ${g.seen ? 'muted' : 'b'}">${esc(g.anon ? 'Anônimo' : g.name.split(' ')[0])}</span></div>`).join('');
   return `<div class="stbar" role="group" aria-label="Status">${me}${others}</div>`;
 }
-function stopStory() { ui.sv = null; }
 function modalStory() {
   const list = storyList(), sv = ui.sv; if (!sv) return '';
   const g = list[sv.g], s = g && g.stories[sv.i]; if (!s) return '';
@@ -404,16 +403,66 @@ function bindStory() {
   z.addEventListener('pointercancel', () => { t0 = 0; if (!(ui.sv && ui.sv.panel)) ov.classList.remove('paused'); });
 }
 const STORY_BG_N = 5;
+let snStream = null;
+function stopCam() { if (snStream) { snStream.getTracks().forEach((t) => t.stop()); snStream = null; } }
+const SNI = {
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  back: '<polyline points="15 18 9 12 15 6"/>',
+  flip: '<path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><polyline points="18 2 19 6 15 7"/><polyline points="6 22 5 18 9 17"/>',
+  img: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 16l-5-5-8 8"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+};
+const sic = (n, z = 22) => `<svg viewBox="0 0 24 24" width="${z}" height="${z}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SNI[n]}</svg>`;
 function modalStoryNew() {
-  const bg = ui.stBg || 0;
-  return sheet('Novo status', `<form data-form="story" novalidate>
-    <div class="snprev sb${bg}" id="snprev"><img id="snimg" alt="" hidden><textarea name="text" id="sntext" maxlength="200" rows="4" placeholder="Digite seu status…"></textarea></div>
-    <div class="snrow">${Array.from({ length: STORY_BG_N }, (_, i) => `<button type="button" class="snc sb${i} ${bg === i ? 'on' : ''}" data-action="st-bg" data-v="${i}" aria-label="Cor ${i + 1}"></button>`).join('')}
-      <input type="file" id="stPhotoIn" accept="image/*" hidden><button type="button" class="photobtn sm" data-action="st-photo" id="stPhotoBtn">${ic('camera', 18)} Foto</button></div>
-    <label class="anonbox"><span class="anontxt"><b>Publicar como anônimo</b><span class="muted small">Seu nome não aparece. Some em 24 horas.</span></span><input type="checkbox" class="sw" name="anon" ${ui.user && ui.user.anon ? 'checked' : ''}></label>
-    <p class="muted small">Quem viu aparece só para você. Não publique dados de pacientes ou exames.</p>
-    <div class="error" id="formError" role="alert"></div>
-    <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" type="submit">Publicar status</button></div></form>`);
+  const n = ui.sn; if (!n) return '';
+  const anon = `<button type="button" class="sn-anon ${n.anon ? 'on' : ''}" data-action="sn-anon" aria-pressed="${n.anon}">${sic('user', 16)} Anônimo<i></i></button>`;
+  const modes = `<div class="sn-modes" role="group" aria-label="Tipo de status"><button class="${n.mode === 'foto' ? 'on' : ''}" data-action="sn-mode" data-v="foto">Foto</button><button class="${n.mode === 'texto' ? 'on' : ''}" data-action="sn-mode" data-v="texto">Texto</button></div>`;
+  const files = '<input type="file" id="snFile" accept="image/*" hidden><input type="file" id="snCap" accept="image/*" capture="environment" hidden>';
+  let frame, bar;
+  if (n.mode === 'texto') {
+    frame = `<div class="sn-frame sb${n.bg}"><button class="sn-gl tl" data-action="close-modal" aria-label="Fechar">${sic('x')}</button>${anon.replace('class="sn-anon', 'class="sn-anon tr')}<textarea id="sntext" maxlength="200" rows="5" placeholder="Digite seu status…">${esc(n.text)}</textarea></div>`;
+    bar = `<div class="sn-row"><div class="sn-dots">${Array.from({ length: STORY_BG_N }, (_, i) => `<button class="snc sb${i} ${n.bg === i ? 'on' : ''}" data-action="st-bg" data-v="${i}" aria-label="Cor ${i + 1}"></button>`).join('')}</div><button class="sn-pub" data-action="sn-pub">Publicar</button></div>${modes}`;
+  } else if (n.blob) {
+    frame = `<div class="sn-frame"><img class="sn-shot" src="${n.url}" alt="Sua foto"><button class="sn-gl tl" data-action="sn-redo" aria-label="Refazer">${sic('back')}</button>${anon.replace('class="sn-anon', 'class="sn-anon tr')}</div>`;
+    bar = `<input class="sn-cap" id="sncap" maxlength="200" placeholder="Adicione uma legenda…" value="${esc(n.text)}"><div class="sn-row"><button class="sn-redo" data-action="sn-redo">Refazer</button><button class="sn-pub" data-action="sn-pub">Publicar status</button></div>`;
+  } else {
+    frame = `<div class="sn-frame cam ${n.facing === 'user' ? 'mir' : ''}">${n.camErr ? `<div class="sn-err"><p>Não consegui abrir a câmera aqui.</p><button class="btn" data-action="sn-native">Abrir câmera do celular</button></div>` : '<video id="snvideo" autoplay playsinline muted></video>'}<button class="sn-gl tl" data-action="close-modal" aria-label="Fechar">${sic('x')}</button><button class="sn-gl tr" data-action="sn-flip" aria-label="Virar câmera">${sic('flip')}</button><span class="sn-hint">Registre o plantão, o dia, o que quiser</span></div>`;
+    bar = `<div class="sn-ctl"><button class="sn-gal" data-action="sn-gallery" aria-label="Escolher da galeria">${sic('img', 24)}</button><button class="sn-shut" data-action="sn-shoot" aria-label="Tirar foto"><i></i></button><span class="sn-gal ghost"></span></div>${modes}`;
+  }
+  return `<div class="overlay stv snew" id="snew">${frame}<div class="sn-bar">${bar}</div>${files}</div>`;
+}
+async function startCam() {
+  const n = ui.sn; if (!n || n.mode !== 'foto' || n.blob || n.camErr) return;
+  const v = document.getElementById('snvideo'); if (!v) return;
+  stopCam();
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('sem câmera');
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: n.facing }, width: { ideal: 1280 } }, audio: false });
+    if (ui.modal !== 'snew' || !ui.sn || ui.sn.blob) { stream.getTracks().forEach((t) => t.stop()); return; }
+    snStream = stream; v.srcObject = stream;
+  } catch { if (ui.sn) { ui.sn.camErr = true; snRender(); } }
+}
+function snRender() {
+  const ov = document.getElementById('snew'); if (!ov) return;
+  if (ui.sn && ui.sn.mode === 'texto') { const t = document.getElementById('sntext'); if (t) ui.sn.text = t.value; }
+  if (ui.sn && ui.sn.blob) { const c = document.getElementById('sncap'); if (c) ui.sn.text = c.value; }
+  ov.outerHTML = modalStoryNew(); bindSn();
+}
+function snSetBlob(blob) {
+  const n = ui.sn; if (!n) return;
+  if (n.url) URL.revokeObjectURL(n.url);
+  n.blob = blob; n.url = URL.createObjectURL(blob); n.text = ''; stopCam(); snRender();
+}
+function bindSn() {
+  const ov = document.getElementById('snew'); if (!ov) return;
+  const fit = () => { if (window.visualViewport) ov.style.height = window.visualViewport.height + 'px'; };
+  fit(); if (window.visualViewport && !ov.dataset.vv) { ov.dataset.vv = '1'; window.visualViewport.addEventListener('resize', fit); }
+  const pick = async (inp) => { const f = inp.files && inp.files[0]; if (!f) return; try { snSetBlob(await processImage(f, 1280, 0.82)); } catch (e) { toast(e.message); } inp.value = ''; };
+  const a = document.getElementById('snFile'), c = document.getElementById('snCap');
+  if (a) a.addEventListener('change', () => pick(a)); if (c) c.addEventListener('change', () => pick(c));
+  const t = document.getElementById('sntext'); if (t) t.addEventListener('input', () => { ui.sn.text = t.value; });
+  const cp = document.getElementById('sncap'); if (cp) cp.addEventListener('input', () => { ui.sn.text = cp.value; });
+  startCam();
 }
 async function loadStories() {
   if (Store.mode !== 'api' || !ui.user) return;
@@ -949,7 +998,7 @@ window.addEventListener('popstate', () => {
 
 function render() {
   document.body.classList.toggle('dark-welcome', !ui.user);
-  document.body.classList.toggle('noscroll', ui.modal === 'story' || ui.modal === 'notifs' || ui.modal === 'place' || ui.modal === 'council' || ui.modal === 'company' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
+  document.body.classList.toggle('noscroll', ui.modal === 'story' || ui.modal === 'snew' || ui.modal === 'notifs' || ui.modal === 'place' || ui.modal === 'council' || ui.modal === 'company' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
   if (!ui.user) {
     $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
@@ -960,6 +1009,7 @@ function render() {
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom):not(.stv)'); if (ov) ov.classList.add('enter'); }
   ui.prevModal = ui.modal;
+  if (ui.modal !== 'snew') stopCam();
   bindModal();
 }
 
@@ -1078,12 +1128,7 @@ function fitSheet() {
 if (window.visualViewport) { window.visualViewport.addEventListener('resize', fitSheet); window.visualViewport.addEventListener('scroll', fitSheet); }
 function bindModal() {
   if (ui.modal === 'story') bindStory();
-  const sp = document.getElementById('stPhotoIn');
-  if (sp) sp.addEventListener('change', async () => {
-    const f = sp.files && sp.files[0]; if (!f) return;
-    try { ui.stBlob = await processImage(f, 1280, 0.82); const im = document.getElementById('snimg'); im.src = URL.createObjectURL(ui.stBlob); im.hidden = false; document.getElementById('snprev').classList.add('hasimg'); } catch (e) { toast(e.message); }
-    sp.value = '';
-  });
+  if (ui.modal === 'snew') bindSn();
   bindSheetDrag('msheet'); bindSheetDrag('csheet', 'clist'); bindSheetDrag('gsheet'); fitSheet();
   const pin = document.getElementById('photoIn');
   if (pin) {
@@ -1212,9 +1257,37 @@ document.addEventListener('click', async (ev) => {
       try { const r = await Store.supportDemand(d.id); d.sup = r.sup; d.n = r.n; render(); } catch (e) { toast(e.message); } return;
     }
     if (a === 'del-demand') { try { await Store.deleteDemand(el.dataset.id); ui.demands = ui.demands.filter((x) => x.id !== el.dataset.id); render(); toast('Cobrança apagada.'); } catch (e) { toast(e.message); } return; }
-    if (a === 'new-story') { ui.stBg = 0; ui.stBlob = null; return openModal('snew'); }
-    if (a === 'st-bg') { ui.stBg = Number(el.dataset.v); const pv = document.getElementById('snprev'); if (pv) pv.className = pv.className.replace(/sb\d/, 'sb' + ui.stBg) ; document.querySelectorAll('.snc').forEach((b) => b.classList.toggle('on', b === el)); return; }
-    if (a === 'st-photo') { const pi = document.getElementById('stPhotoIn'); if (pi) pi.click(); return; }
+    if (a === 'new-story') { ui.sn = { mode: 'foto', bg: 0, anon: !!(ui.user && ui.user.anon), text: '', blob: null, url: null, facing: 'environment', camErr: false }; return openModal('snew'); }
+    if (a === 'st-bg') { ui.sn.bg = Number(el.dataset.v); snRender(); return; }
+    if (a === 'sn-anon') { ui.sn.anon = !ui.sn.anon; snRender(); return; }
+    if (a === 'sn-mode') { if (ui.sn.mode === el.dataset.v) return; ui.sn.mode = el.dataset.v; ui.sn.blob = null; stopCam(); snRender(); return; }
+    if (a === 'sn-flip') { ui.sn.facing = ui.sn.facing === 'user' ? 'environment' : 'user'; stopCam(); snRender(); return; }
+    if (a === 'sn-gallery') { const i = document.getElementById('snFile'); if (i) i.click(); return; }
+    if (a === 'sn-native') { const i = document.getElementById('snCap'); if (i) i.click(); return; }
+    if (a === 'sn-redo') { if (ui.sn.url) URL.revokeObjectURL(ui.sn.url); ui.sn.blob = null; ui.sn.url = null; ui.sn.text = ''; snRender(); return; }
+    if (a === 'sn-shoot') {
+      const v = document.getElementById('snvideo');
+      if (!v || !snStream || !v.videoWidth) { const i = document.getElementById('snCap'); if (i) i.click(); return; }
+      const sc = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight)), cv = document.createElement('canvas');
+      cv.width = Math.round(v.videoWidth * sc); cv.height = Math.round(v.videoHeight * sc);
+      cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
+      cv.toBlob((bl) => { if (bl) snSetBlob(bl); else toast('Não consegui tirar a foto.'); }, 'image/jpeg', 0.82);
+      return;
+    }
+    if (a === 'sn-pub') {
+      const n = ui.sn; if (n.busy) return;
+      const tx = document.getElementById(n.mode === 'texto' ? 'sntext' : 'sncap'); if (tx) n.text = tx.value;
+      const text = String(n.text || '').trim();
+      if (n.mode === 'texto' && text.length < 2) return toast('Escreva algo no status.');
+      if (n.mode === 'foto' && !n.blob) return toast('Tire ou escolha uma foto.');
+      n.busy = true; el.disabled = true; el.style.opacity = '.6';
+      try {
+        const image = n.mode === 'foto' ? await Store.upload(n.blob) : null;
+        await Store.createStory({ text, bg: n.mode === 'texto' ? n.bg : 0, image, anon: n.anon });
+      } catch (e) { n.busy = false; el.disabled = false; el.style.opacity = ''; return toast(e.message); }
+      if (n.url) URL.revokeObjectURL(n.url);
+      ui.sn = null; stopCam(); closeModal(); toast('Status publicado.'); loadStories(); return;
+    }
     if (a === 'st-open') { ui.sv = { g: Number(el.dataset.g), i: 0 }; const g = storyList()[ui.sv.g]; if (!g) { ui.sv = null; return; } if (!g.mine) { const k = g.stories.findIndex((x) => !x.seen); ui.sv.i = k < 0 ? 0 : k; } showStory(true); return openModal('story'); }
     if (a === 'st-zap') { const s = storyList()[ui.sv.g].stories[ui.sv.i]; s.zapped = !s.zapped; el.classList.toggle('on', s.zapped); try { const r = await Store.zapStory(s.id); s.zapped = r.zapped; el.classList.toggle('on', s.zapped); } catch (e) { s.zapped = !s.zapped; el.classList.toggle('on', s.zapped); toast(e.message); } return; }
     if (a === 'st-views') {
@@ -1470,20 +1543,6 @@ document.addEventListener('submit', async (ev) => {
       finally { busy(f, false); }
       if (ui.modal) { ui.modal = null; popSilently(); } toast('Relato enviado.');
       return refresh();
-    }
-    if (kind === 'story') {
-      const text = String(d.get('text') || '').trim();
-      if (!ui.stBlob && text.length < 2) return err('Escreva algo ou escolha uma foto.');
-      busy(f, true);
-      try {
-        const image = ui.stBlob ? await Store.upload(ui.stBlob) : null;
-        await Store.createStory({ text, bg: ui.stBg || 0, image, anon: !!d.get('anon') });
-        ui.stBlob = null;
-      } catch (e) { busy(f, false); return err(e.message); }
-      busy(f, false);
-      if (ui.modal) { ui.modal = null; popSilently(); }
-      toast('Status publicado.');
-      await loadStories(); return render();
     }
     if (kind === 'post') {
       const text = String(d.get('text') || '').trim();
