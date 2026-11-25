@@ -15,7 +15,7 @@ button{cursor:pointer;border:0;background:none}
 .col{max-width:640px;margin:0 auto}
 .top{background:var(--navy);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 12px;position:sticky;top:0;z-index:5}
 .top b{font-size:17px}
-.nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:4px 4px calc(4px + env(safe-area-inset-bottom));z-index:10}
+.nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);align-items:center;padding:4px 4px calc(4px + env(safe-area-inset-bottom));z-index:10}
 .nav button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;min-height:52px;color:var(--muted);font-size:12px}
 .nav button.on{color:var(--blue);font-weight:600}
 @media(min-width:900px){
@@ -221,3 +221,6 @@ body.dark-welcome main.pad .btn.big{margin-top:14px}
 body.dark-welcome main.pad input,body.dark-welcome main.pad select,body.dark-welcome main.pad textarea{color:var(--text)}
 body.dark-welcome main.pad .crtrbox{color:var(--text)}
 body.dark-welcome main.pad .crtrbox span{color:var(--blue)}
+.nav .navplus{width:52px;height:52px;min-height:52px;margin:-20px auto 0;padding:0;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(31,111,235,.4);border:3px solid #fff;flex-direction:row}
+.nav .navplus:active{transform:scale(.95)}
+@media (min-width:900px){.nav .navplus{margin:8px 0;width:100%;height:46px;border-radius:12px;border:0;box-shadow:none;order:-1}}

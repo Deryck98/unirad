@@ -358,12 +358,32 @@ function modalDeleteAccount() {
 
 /* ---------- render ---------- */
 function nav() {
-  const items = [['inicio', 'home', 'Início'], ['comunidade', 'users', 'Comunidade'], ['direitos', 'shield', 'Direitos'], ['perfil', 'user', 'Perfil']];
-  return `<nav class="nav">${items.map(([k, i, l]) => `<button class="${ui.tab === k ? 'on' : ''}" data-action="tab" data-t="${k}" aria-label="${l}">${ic(i)}<span>${l}</span></button>`).join('')}</nav>`;
+  const t = (k, i, l) => `<button class="${ui.tab === k ? 'on' : ''}" data-action="tab" data-t="${k}" aria-label="${l}">${ic(i)}<span>${l}</span></button>`;
+  return `<nav class="nav">${t('inicio', 'home', 'Início')}${t('comunidade', 'users', 'Comunidade')}<button class="navplus" data-action="new-post" aria-label="Nova publicação">${ic('plus', 26)}</button>${t('direitos', 'shield', 'Direitos')}${t('perfil', 'user', 'Perfil')}</nav>`;
 }
 function header() {
   return `<header class="top"><div class="row gap8">${logo(34)}<div><b>UniRad</b><div class="small dim">${CONFIG.tagline}</div></div></div></header>`;
 }
+
+/* ---- botão voltar do celular: volta uma tela dentro do app ---- */
+const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignorado */ } };
+const popSilently = () => { ui.skipPop = 1; history.back(); };
+function openModal(m) { ui.modal = m; pushH(); render(); }
+function closeModal() { if (ui.modal) { ui.modal = null; popSilently(); } render(); }
+function openRootModal(html) { document.getElementById('modalRoot').innerHTML = html; ui.rootModal = true; pushH(); }
+function closeRootModal() { document.getElementById('modalRoot').innerHTML = ''; if (ui.rootModal) { ui.rootModal = false; popSilently(); } }
+window.addEventListener('popstate', () => {
+  if (ui.skipPop) { ui.skipPop = 0; return; }
+  if (ui.rootModal) { document.getElementById('modalRoot').innerHTML = ''; ui.rootModal = false; return; }
+  if (ui.modal) { ui.modal = null; return render(); }
+  if (!ui.user) {
+    if (ui.screen === 'signup' && ui.signupStep === 2) ui.signupStep = 1;
+    else if (ui.screen !== 'welcome') ui.screen = 'welcome';
+    else return;
+    return render();
+  }
+  if (ui.tab !== 'inicio') { ui.tab = 'inicio'; window.scrollTo(0, 0); refresh(); }
+});
 
 function render() {
   document.body.classList.toggle('dark-welcome', !ui.user);
@@ -444,21 +464,21 @@ document.addEventListener('click', async (ev) => {
   try {
     if (a === 'close-modal') {
       if (ev.target.closest('[data-stop]') && !ev.target.closest('button[data-action="close-modal"]')) return;
-      if (!ui.user) { document.getElementById('modalRoot').innerHTML = ''; return; }
-      ui.modal = null; return render();
+      if (!ui.user) { closeRootModal(); return; }
+      return closeModal();
     }
-    if (a === 'show-terms') { ev.preventDefault(); if (!ui.user) { document.getElementById('modalRoot').innerHTML = sheet('Regras do UniRad', TERMS); return; } ui.modal = 'terms'; return render(); }
-    if (a === 'view-user') { const u = await Store.getUser(el.dataset.id); if (u) { ui.viewUser = u; ui.modal = 'user'; render(); } return; }
+    if (a === 'show-terms') { ev.preventDefault(); if (!ui.user) { openRootModal(sheet('Regras do UniRad', TERMS)); return; } return openModal('terms'); }
+    if (a === 'view-user') { const u = await Store.getUser(el.dataset.id); if (u) { ui.viewUser = u; openModal('user'); } return; }
     if (a === 'toggle-pw') {
       const inp = el.parentElement.querySelector('input'); const show = inp.type === 'password';
       inp.type = show ? 'text' : 'password'; el.innerHTML = ic(show ? 'eyeoff' : 'eye', 22); el.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha'); return;
     }
-    if (a === 'go-signup') { ui.screen = 'signup'; ui.signupStep = 1; return render(); }
-    if (a === 'signup-back') { ui.signupStep = 1; return render(); }
+    if (a === 'go-signup') { ui.screen = 'signup'; ui.signupStep = 1; pushH(); return render(); }
+    if (a === 'signup-back') { history.back(); return; }
     if (a === 'install') {
       if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch { /* ignorado */ } installEvt = null; return render(); }
-      if (!ui.user) { document.getElementById('modalRoot').innerHTML = modalInstall(); return; }
-      ui.modal = 'install'; return render();
+      if (!ui.user) { openRootModal(modalInstall()); return; }
+      return openModal('install');
     }
     if (a === 'toggle-month') {
       el.classList.toggle('on');
@@ -485,16 +505,20 @@ document.addEventListener('click', async (ev) => {
       const r = await Store.posts({ scope: scopeOf(ui.view), cat: ui.tab === 'inicio' ? 'tudo' : ui.cat, before: last && last.t });
       ui.posts = ui.posts.concat(r.posts); ui.more = r.more; return render();
     }
-    if (a === 'go-login') { ui.screen = 'login'; return render(); }
-    if (a === 'go-welcome') { ui.screen = 'welcome'; return render(); }
+    if (a === 'go-login') { ui.screen = 'login'; pushH(); return render(); }
+    if (a === 'go-welcome') { history.back(); return; }
     if (a === 'pick-region') { ui.regionPick = Number(el.dataset.id); document.getElementById('picked').innerHTML = pickedHtml(); document.getElementById('reglist').innerHTML = regionListHtml(); return; }
-    if (a === 'tab') { ui.tab = el.dataset.t; ui.modal = null; window.scrollTo(0, 0); return refresh(); }
+    if (a === 'tab') {
+      const t = el.dataset.t; if (t === ui.tab) { window.scrollTo(0, 0); return; }
+      if (ui.tab === 'inicio') pushH(); else if (t === 'inicio') popSilently();
+      ui.tab = t; window.scrollTo(0, 0); return refresh();
+    }
     if (a === 'view') { ui.view = el.dataset.v; return refresh(); }
     if (a === 'cat') { ui.cat = el.dataset.c; return refresh({ quiet: true }); }
-    if (a === 'new-delay') { ui.modal = 'delay'; return render(); }
-    if (a === 'new-post') { ui.postCat = 'geral'; ui.modal = 'post'; return render(); }
-    if (a === 'new-poll') { ui.postCat = 'enquete'; ui.modal = 'post'; return render(); }
-    if (a === 'ask-delete') { ui.modal = 'delete'; return render(); }
+    if (a === 'new-delay') return openModal('delay');
+    if (a === 'new-post') { ui.postCat = 'geral'; return openModal('post'); }
+    if (a === 'new-poll') { ui.postCat = 'enquete'; return openModal('post'); }
+    if (a === 'ask-delete') return openModal('delete');
     if (a === 'like') { await Store.toggleLike(el.dataset.id); return refresh({ quiet: true }); }
     if (a === 'toggle-comments') { ui.open[el.dataset.id] = !ui.open[el.dataset.id]; return render(); }
     if (a === 'report') { if (confirm('Denunciar esta publicação por ofensa ou dados de paciente?')) { await Store.report(el.dataset.id); toast('Denúncia enviada. Obrigado.'); refresh({ quiet: true }); } return; }
@@ -531,7 +555,7 @@ document.addEventListener('submit', async (ev) => {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return err('Digite um e-mail válido.');
       if (password.length < 6) return err('A senha precisa ter pelo menos 6 caracteres.');
       if (password !== String(d.get('password2') || '')) return err('As senhas não são iguais. Digite de novo.');
-      ui.sd = { name, email, password }; ui.signupStep = 2; window.scrollTo(0, 0);
+      ui.sd = { name, email, password }; ui.signupStep = 2; pushH(); window.scrollTo(0, 0);
       return render();
     }
     if (kind === 'signup') {
@@ -563,7 +587,7 @@ document.addEventListener('submit', async (ev) => {
       busy(f, true);
       try { await Store.addDelay({ hospital, type: String(d.get('type')), items }); }
       finally { busy(f, false); }
-      ui.modal = null; toast('Relato enviado.');
+      if (ui.modal) { ui.modal = null; popSilently(); } toast('Relato enviado.');
       return refresh();
     }
     if (kind === 'post') {
@@ -576,7 +600,8 @@ document.addEventListener('submit', async (ev) => {
       try {
         await Store.addPost({ cat, poll, scope: String(d.get('scope')), anon: !!d.get('anon'), text, place: cat === 'vagas' ? String(d.get('place') || '').trim() : '', salary: cat === 'vagas' ? String(d.get('salary') || '').trim() : '' });
       } finally { busy(f, false); }
-      ui.modal = null; ui.tab = 'comunidade'; ui.cat = 'tudo';
+      if (ui.modal) { ui.modal = null; if (ui.tab !== 'inicio') popSilently(); } else if (ui.tab === 'inicio') pushH();
+      ui.tab = 'comunidade'; ui.cat = 'tudo';
       return refresh();
     }
     if (kind === 'profile') {
