@@ -70,7 +70,8 @@ const initials = (n) => String(n).split(/\s+/).filter(Boolean).slice(0, 2).map((
 const isAnon = (n) => n === 'Profissional anônimo';
 const imgUrl = (k) => `/api/img/${encodeURIComponent(k)}`;
 const INVITE = () => `Estou no UniRad, a rede dos técnicos e tecnólogos em radiologia, por piso, jornada e salário em dia. Entre com seu CRTR: ${location.origin}`;
-const avatar = (n, key, cls = '') => (isAnon(n) ? `<div class="avatar ${cls}">${ic('user', 18)}</div>` : key ? `<img class="avatar ${cls}" src="${imgUrl(key)}" alt="" loading="lazy" decoding="async">` : `<div class="avatar ini ${cls}">${esc(initials(n))}</div>`);
+const hue = (n) => { let h = 0; for (const ch of String(n)) h = (h * 31 + ch.charCodeAt(0)) % 997; return h % 6; };
+const avatar = (n, key, cls = '') => (isAnon(n) ? `<div class="avatar ${cls}">${ic('user', 18)}</div>` : key ? `<img class="avatar ${cls}" src="${imgUrl(key)}" alt="" loading="lazy" decoding="async">` : `<div class="avatar ini av${hue(n)} ${cls}">${esc(initials(n))}</div>`);
 
 function pollHtml(p) {
   const pl = p.poll;
@@ -288,7 +289,7 @@ const SHORTCUTS = [['tudo', 'users', 'Tudo'], ['vagas', 'briefcase', 'Vagas'], [
 function shortcuts() {
   return `<div class="stories">${SHORTCUTS.filter(([k]) => k !== 'enquete' || Store.mode === 'api').map(([k, i, l]) => {
     const on = k === 'atrasos' ? false : ui.cat === k;
-    return `<button class="story ${on ? 'on' : ''}" data-action="${k === 'atrasos' ? 'tab' : 'cat'}" ${k === 'atrasos' ? 'data-t="atrasos"' : `data-c="${k}"`}><span class="ring"><span class="in">${ic(i, 22)}</span></span><span class="lbl">${l}</span></button>`;
+    return `<button class="story s-${k} ${on ? 'on' : ''}" data-action="${k === 'atrasos' ? 'tab' : 'cat'}" ${k === 'atrasos' ? 'data-t="atrasos"' : `data-c="${k}"`}><span class="ring"><span class="in">${ic(i, 22)}</span></span><span class="lbl">${l}</span></button>`;
   }).join('')}</div>`;
 }
 
