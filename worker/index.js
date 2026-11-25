@@ -7,7 +7,8 @@ const SESSION_DAYS = 30;
 const ROLES = ['Técnico em Radiologia', 'Tecnólogo em Radiologia'];
 const DELAY_TYPES = ['Salário atrasado', 'Pagamento abaixo do piso', 'Hora extra / plantão sem pagar', 'Adicional não pago', 'Outro'];
 const CATS = ['geral', 'vagas', 'cursos', 'enquete', 'aviso'];
-const TOPICS = { estrutura: 'scale', protecao: 'scale', dosimetro: 'scale', ambiente: 'scale', piso: 'yn', jornada: 'yn', pagamento: 'yn' };
+const TOPICS = { estrutura: 'scale', protecao: 'scale', dosimetro: 'scale', ambiente: 'scale', piso: 'yn', jornada: 'yn', pagamento: 'yn', desconto: 'yn', exigiu: 'yn' };
+const COMP_ONLY = ['desconto', 'exigiu', 'vinculo'];
 const KINDS = ['hospital', 'upa', 'clinica', 'outro'];
 const MIN_RATES = 3;
 const PAGE = 20;
@@ -271,6 +272,7 @@ const normKey = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, ''
 function summarize(rows) {
   const out = {};
   for (const r of rows) {
+    if (!TOPICS[r.topic]) continue;
     const n = r.n, avg = r.avg, kind = TOPICS[r.topic];
     const visible = n >= MIN_RATES;
     const pctNao = kind === 'yn' ? Math.round((r.nao / n) * 100) : null;
@@ -606,7 +608,7 @@ export default {
       if (plm && plm[2] && m === 'PUT') {
         const b = await readJson(req);
         const topic = str(b.topic, 20), kind = TOPICS[topic];
-        if (!kind) throw bad('Assunto inválido.');
+        if (!kind || COMP_ONLY.includes(topic)) throw bad('Assunto inválido.');
         if (!(await env.DB.prepare('SELECT 1 AS x FROM places WHERE id = ?').bind(plm[1]).first())) throw new HttpError(404, 'Local não encontrado.');
         if (b.value === null) { await env.DB.prepare('DELETE FROM place_rates WHERE place_id = ? AND user_id = ? AND topic = ?').bind(plm[1], user.id, topic).run(); return json({ ok: true }); }
         const v = Number(b.value);
@@ -646,17 +648,20 @@ export default {
         const pid = url.searchParams.get('place') || '';
         const mine = /^[0-9a-f-]{36}$/.test(pid) ? await env.DB.prepare('SELECT topic, value FROM company_rates WHERE company_id = ? AND place_id = ? AND user_id = ?').bind(cpm[1], pid, user.id).all() : { results: [] };
         const watching = !!(await env.DB.prepare("SELECT 1 AS x FROM watch WHERE user_id = ? AND kind = 'company' AND ref = ?").bind(user.id, cpm[1]).first());
-        return json({ company: { ...c, raters, geral: sm.geral, crit: sm.crit }, topics: sm.topics, places: pls.results, mine: Object.fromEntries(mine.results.map((r) => [r.topic, r.value])), watching });
+        const vr = await env.DB.prepare("SELECT value, COUNT(*) AS n FROM company_rates WHERE company_id = ? AND topic = 'vinculo' GROUP BY value").bind(cpm[1]).all();
+        const vt = vr.results.reduce((a, r) => a + r.n, 0);
+        const vinculos = vt >= MIN_RATES ? { total: vt, ...Object.fromEntries([1, 2, 3, 4].map((k) => [k, Math.round(((vr.results.find((r) => r.value === k) || { n: 0 }).n / vt) * 100)])) } : null;
+        return json({ company: { ...c, raters, geral: sm.geral, crit: sm.crit }, vinculos, topics: sm.topics, places: pls.results, mine: Object.fromEntries(mine.results.map((r) => [r.topic, r.value])), watching });
       }
       if (cpm && cpm[2] && m === 'PUT') {
         const b = await readJson(req);
         const topic = str(b.topic, 20), pid = String(b.place || '');
-        if (!PAY.includes(topic)) throw bad('Assunto inválido.');
+        if (!PAY.includes(topic) && !COMP_ONLY.includes(topic)) throw bad('Assunto inválido.');
         const c = await env.DB.prepare('SELECT name FROM companies WHERE id = ?').bind(cpm[1]).first();
         if (!c || !(await env.DB.prepare('SELECT 1 AS x FROM places WHERE id = ?').bind(pid).first())) throw new HttpError(404, 'Não encontrado.');
         if (b.value === null) { await env.DB.prepare('DELETE FROM company_rates WHERE company_id = ? AND place_id = ? AND user_id = ? AND topic = ?').bind(cpm[1], pid, user.id, topic).run(); return json({ ok: true }); }
         const v = Number(b.value);
-        if (![1, 3, 5].includes(v)) throw bad('Nota inválida.');
+        if (topic === 'vinculo' ? ![1, 2, 3, 4].includes(v) : ![1, 3, 5].includes(v)) throw bad('Nota inválida.');
         await rateLimit(env, 'company_rates', user.id, 150, DAY);
         const had = await env.DB.prepare('SELECT 1 AS x FROM company_rates WHERE company_id = ? AND place_id = ? AND user_id = ? AND topic = ?').bind(cpm[1], pid, user.id, topic).first();
         if (!had) await notifyWatchers(env, 'company', cpm[1], c.name, user.id);

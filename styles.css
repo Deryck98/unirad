@@ -557,3 +557,8 @@ body:not(.dark-welcome){background:#eef3fb}
 .lkcopy{flex:none;width:52px;border-left:1px solid #b9c4d8;display:flex;align-items:center;justify-content:center;color:var(--navy)}
 .lkcopy:active,.lkmain:active{background:#eef3fb}
 .linkurl{background:#f1f4f9;border-radius:8px;padding:10px;font-size:13px;word-break:break-all;margin:10px 0 14px}
+.vbar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#e7ecf4;margin:6px 0}
+.vbar i{display:block;height:100%}
+.vleg{display:flex;gap:12px;flex-wrap:wrap}
+.vleg span{display:inline-flex;align-items:center;gap:5px}
+.vleg i{width:9px;height:9px;border-radius:50%;display:inline-block}

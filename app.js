@@ -386,6 +386,12 @@ const TOPIC_META = [
   ['ambiente', 'Ambiente e respeito', 'scale']
 ];
 const PAYM = TOPIC_META.slice(0, 3), LOCM = TOPIC_META.slice(3);
+const COEX = [
+  ['desconto', 'Faz desconto no valor da nota?', 'yn', ['Não faz desconto', 'Faz desconto', 'Às vezes'], 'Faz desconto no valor da nota'],
+  ['exigiu', 'Pediram para você virar sócio ou abrir empresa?', 'yn', ['Não pediram', 'Pediram', 'Mais ou menos'], 'Pediram para virar sócio ou abrir empresa']
+];
+const COM = [...PAYM, ...COEX];
+const VINC = [[1, 'Carteira assinada (CLT)', 'CLT'], [2, 'Prestador de serviço (emito nota)', 'Prestador'], [3, 'Sócio da empresa (cotista)', 'Sócio'], [4, 'Outro', 'Outro']];
 const WORDS = ['Péssimo', 'Ruim', 'Regular', 'Bom', 'Ótimo'];
 const wordOf = (avg) => WORDS[Math.min(4, Math.max(0, Math.round(avg) - 1))];
 const scoreCls = (v) => (v == null ? '' : v < 2.5 ? 'bad' : v >= 4 ? 'good' : 'mid');
@@ -440,7 +446,7 @@ function modalPlace() {
   const { place, topics } = d, tab = ui.ptab || 'resumo';
   const direct = PAYM.filter((m) => topics[m[0]] && topics[m[0]].visible);
   const body = tab === 'empresas'
-    ? (d.companies.length ? d.companies.map((c) => { const crit = PAYM.filter((m) => c.topics[m[0]] && c.topics[m[0]].state === 'crit').map((m) => m[4]); const good = PAYM.filter((m) => c.topics[m[0]] && c.topics[m[0]].state === 'good').length; return `<button class="ecard" data-action="open-company" data-id="${c.id}" data-place="${place.id}"><span class="sgl av${hue(c.name)}">${esc(sigla(c.name))}</span><span class="einfo"><b>${esc(c.name)}</b>${crit.length ? `<span class="small redtxt">${esc(crit.join(' · '))}</span>` : good ? '<span class="small goodtxt">Sem alertas de pagamento</span>' : '<span class="muted small">Poucas respostas</span>'}</span>${ring(c.geral)}</button>`; }).join('') : '<p class="muted small">Nenhuma empresa avaliada neste local ainda. Toque em "Avaliar" e informe quem contrata você.</p>')
+    ? (d.companies.length ? d.companies.map((c) => { const crit = COM.filter((m) => c.topics[m[0]] && c.topics[m[0]].state === 'crit').map((m) => m[4]); const good = PAYM.filter((m) => c.topics[m[0]] && c.topics[m[0]].state === 'good').length; return `<button class="ecard" data-action="open-company" data-id="${c.id}" data-place="${place.id}"><span class="sgl av${hue(c.name)}">${esc(sigla(c.name))}</span><span class="einfo"><b>${esc(c.name)}</b>${crit.length ? `<span class="small redtxt">${esc(crit.join(' · '))}</span>` : good ? '<span class="small goodtxt">Sem alertas de pagamento</span>' : '<span class="muted small">Poucas respostas</span>'}</span>${ring(c.geral)}</button>`; }).join('') : '<p class="muted small">Nenhuma empresa avaliada neste local ainda. Toque em "Avaliar" e informe quem contrata você.</p>')
     : tab === 'atrasos'
       ? (d.delays ? `<div class="stat red"><div class="small">Relatos sobre este local</div><div class="n">${d.delays.total}</div></div>${d.delays.avgDays ? `<p class="muted small">Atraso médio de salário: ${d.delays.avgDays} dias.</p>` : ''}` : '<p class="muted small">Ainda não há relatos suficientes sobre este local. Aparecem com 3 relatos ou mais, para proteger quem relata.</p>') + '<button class="btn out" data-action="new-delay">Relatar atraso</button>'
       : `${alertBoxes(topics, [...LOCM, ...PAYM])}<div class="tps">${LOCM.map((m) => topicBar(m, topics[m[0]])).join('')}${direct.length ? `<div class="usec">Contratação direta</div>${direct.map((m) => topicBar(m, topics[m[0]])).join('')}` : ''}</div>${place.geral == null ? '<p class="muted small">Cada assunto só aparece depois de 3 respostas, para proteger quem avalia.</p>' : ''}`;
@@ -450,13 +456,18 @@ function modalPlace() {
     <div class="ptabs">${[['resumo', 'Resumo'], ['empresas', 'Empresas'], ['atrasos', 'Atrasos']].map(([v, l]) => `<button class="${tab === v ? 'on' : ''}" data-action="ptab" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="pbody">${body}</div>`);
 }
+function vinculoBar(v) {
+  if (!v) return '';
+  const cols = { 1: '#639922', 2: '#e24b4a', 3: '#ef9f27', 4: '#c5cddb' };
+  return `<div class="tp"><div class="tph"><span>Como os profissionais são contratados</span></div><div class="vbar">${VINC.map(([k]) => (v[k] ? `<i style="width:${v[k]}%;background:${cols[k]}"></i>` : '')).join('')}</div><div class="vleg muted small">${VINC.filter(([k]) => v[k]).map(([k, , s]) => `<span><i style="background:${cols[k]}"></i>${s} ${v[k]}%</span>`).join('')}</div></div>`;
+}
 function modalCompany() {
   const d = ui.company; if (!d) return psheet('Empresa', '<p class="muted small" style="margin-top:50px">Carregando…</p>');
   const { company, topics } = d;
   return psheet(company.name, `<div class="prow2"><span class="sgl big av${hue(company.name)}">${esc(sigla(company.name))}</span>${ring(company.geral, 58)}</div>
     <h3 class="ptitle">${esc(company.name)}</h3><div class="muted small">Empresa terceirizada · atua em ${d.places.length} ${d.places.length === 1 ? 'local' : 'locais'} · ${company.raters} ${company.raters === 1 ? 'avaliação' : 'avaliações'}</div>
     <div class="row gap8" style="margin:12px 0"><button class="btn out" style="flex:1" data-action="watch" data-kind="company" data-id="${company.id}">${d.watching ? 'Acompanhando' : 'Acompanhar'}</button></div>
-    ${alertBoxes(topics, PAYM)}<div class="tps">${PAYM.map((m) => topicBar(m, topics[m[0]])).join('')}</div>
+    ${alertBoxes(topics, COM)}${vinculoBar(d.vinculos)}<div class="tps">${COM.map((m) => topicBar(m, topics[m[0]])).join('')}</div>
     ${company.geral == null ? '<p class="muted small">Cada assunto só aparece depois de 3 respostas, para proteger quem avalia.</p>' : ''}
     <div class="usec">Onde atua</div>${d.places.map((pl) => `<button class="lrow" data-action="open-place" data-id="${pl.id}"><span><b>${esc(pl.name)}</b><br><span class="muted small">${KIND_NAME[pl.kind] || ''}</span></span>${ic('chev', 18)}</button>`).join('') || '<p class="muted small">Ainda sem locais.</p>'}`);
 }
@@ -473,8 +484,10 @@ function modalPick() {
       <div id="pickSug">${psug.map((p) => sugRow('pick-existing', p, KIND_NAME[p.kind] + ' ·')).join('')}</div>`}
     <div class="muted small" style="margin-top:10px">Quem contrata você?</div>
     <div class="chips" role="group" aria-label="Quem contrata"><button type="button" class="chip2 ${rt.employer === 'company' ? 'on' : ''}" data-action="pick-emp" data-v="company">Empresa terceirizada</button><button type="button" class="chip2 ${rt.employer === 'direct' ? 'on' : ''}" data-action="pick-emp" data-v="direct">O próprio local</button></div>
-    ${rt.employer === 'company' ? `<label>Nome da empresa<input id="pickCo" maxlength="80" placeholder="Ex.: Empresa que assina sua carteira" value="${esc(rt.cname || '')}" autocomplete="off"></label><div id="pickCoSug">${csug.map((c) => sugRow('pick-co', c, 'Empresa ·')).join('')}</div>` : ''}
-    <p class="muted small">Você responde primeiro sobre ${rt.employer === 'company' ? 'a empresa' : 'a contratação'} (piso, jornada, pagamento) e depois sobre o local. É anônimo e dá para pular perguntas.</p>
+    ${rt.employer === 'company' ? `<label>Nome da empresa<input id="pickCo" maxlength="80" placeholder="Empresa para quem você presta serviço" value="${esc(rt.cname || '')}" autocomplete="off"></label><div id="pickCoSug">${csug.map((c) => sugRow('pick-co', c, 'Empresa ·')).join('')}</div>
+      <div class="muted small" style="margin-top:10px">Como você é contratado?</div>
+      <div class="chips" role="group" aria-label="Tipo de contratação">${VINC.map(([k, l]) => `<button type="button" class="chip2 ${rt.vinculo === k ? 'on' : ''}" data-action="pick-vinc" data-v="${k}">${l}</button>`).join('')}</div>` : ''}
+    <p class="muted small">Você responde primeiro sobre ${rt.employer === 'company' ? 'a empresa' : 'a contratação'} (piso, jornada, pagamento${rt.employer === 'company' ? ', desconto na nota' : ''}) e depois sobre o local. É anônimo e dá para pular perguntas.</p>
     <div class="error" id="formError" role="alert"></div>
     <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" data-action="pick-go">Começar</button></div>`);
 }
@@ -495,7 +508,7 @@ async function refreshLists() {
   try { const sc = scopeOf(ui.view === 'seguindo' ? 'mine' : ui.view); const [a, b] = await Promise.all([Store.places(sc), Store.companies()]); ui.places = a.places; ui.companies = b.companies; } catch { /* ignorado */ }
 }
 function buildSteps(rt) {
-  const pay = PAYM.map((m) => ({ m, target: rt.employer === 'company' ? 'company' : 'direct' }));
+  const co = rt.employer === 'company', pay = (co ? COM : PAYM).map((m) => ({ m, target: co ? 'company' : 'direct' }));
   return [...pay, ...LOCM.map((m) => ({ m, target: 'place' }))];
 }
 async function finishRate() {
@@ -943,9 +956,10 @@ document.addEventListener('click', async (ev) => {
     if (a === 'asort') { ui.asort = el.dataset.v; return render(); }
     if (a === 'atab') { ui.atab = el.dataset.v; return render(); }
     if (a === 'asub') { ui.asub = el.dataset.v; return render(); }
-    if (a === 'pick-place') { ui.rt = { placeId: null, pname: '', kind: 'hospital', employer: 'company', cname: '', companyId: null }; openModal('pick'); return; }
+    if (a === 'pick-place') { ui.rt = { placeId: null, pname: '', kind: 'hospital', employer: 'company', cname: '', companyId: null, vinculo: null }; openModal('pick'); return; }
     if (a === 'pick-kind') { const inp = document.getElementById('pickName'); if (inp) ui.rt.pname = inp.value; ui.rt.kind = el.dataset.v; return render(); }
     if (a === 'pick-emp') { const i1 = document.getElementById('pickName'), i2 = document.getElementById('pickCo'); if (i1) ui.rt.pname = i1.value; if (i2) ui.rt.cname = i2.value; ui.rt.employer = el.dataset.v; return render(); }
+    if (a === 'pick-vinc') { const i1 = document.getElementById('pickName'), i2 = document.getElementById('pickCo'); if (i1) ui.rt.pname = i1.value; if (i2) ui.rt.cname = i2.value; const k = Number(el.dataset.v); ui.rt.vinculo = ui.rt.vinculo === k ? null : k; return render(); }
     if (a === 'pick-existing') { const pl = (ui.places || []).find((x) => x.id === el.dataset.id); if (pl) { ui.rt.placeId = pl.id; ui.rt.pname = pl.name; ui.rt.kind = pl.kind; } return render(); }
     if (a === 'pick-co') { const c = (ui.companies || []).find((x) => x.id === el.dataset.id); if (c) { ui.rt.companyId = c.id; ui.rt.cname = c.name; } return render(); }
     if (a === 'pick-go') {
@@ -958,6 +972,7 @@ document.addEventListener('click', async (ev) => {
       if (rt.employer === 'company') rt.companyId = await Store.createCompany(cname);
       const [pd, cd] = await Promise.all([Store.place(rt.placeId), rt.employer === 'company' ? Store.company(rt.companyId, rt.placeId) : null]);
       rt.pname = pd.place.name; rt.mineP = pd.mine || {}; rt.mineC = cd ? cd.mine || {} : {};
+      if (cd && rt.vinculo) { await Store.rateCompany(rt.companyId, rt.placeId, 'vinculo', rt.vinculo); rt.mineC.vinculo = rt.vinculo; }
       rt.steps = buildSteps(rt); rt.i = 0; ui.modal = 'rate'; return render();
     }
     if (a === 'open-place') { return openPlace(el.dataset.id); }
@@ -970,7 +985,7 @@ document.addEventListener('click', async (ev) => {
     }
     if (a === 'rate-place') {
       const d = ui.place;
-      ui.rt = { placeId: d.place.id, pname: d.place.name, kind: d.place.kind, employer: d.myCompany ? 'company' : 'company', cname: d.myCompany ? d.myCompany.name : '', companyId: d.myCompany ? d.myCompany.id : null };
+      ui.rt = { placeId: d.place.id, pname: d.place.name, kind: d.place.kind, employer: 'company', cname: d.myCompany ? d.myCompany.name : '', companyId: d.myCompany ? d.myCompany.id : null, vinculo: null };
       ui.rt.fromPlace = true; return openOver('pick');
     }
     if (a === 'rstep' || a === 'rskip' || a === 'rback') {
