@@ -211,15 +211,18 @@ function screenSignup() {
 function screenHome() {
   if (!ui.stats || !ui.posts) return `<main class="pad">${viewSwitch()}${loadingBox}</main>`;
   const { members, national, delays } = ui.stats;
-  const pct = Math.min(100, Math.round((national / CONFIG.goalMembers) * 100));
+  const MARCOS = [100, 500, 1000, 5000, 10000, 50000];
+  const meta = MARCOS.find((m) => national < m) || MARCOS[MARCOS.length - 1];
+  const showBar = national >= 50;
+  const pct = Math.min(100, Math.round((national / meta) * 100));
   const recent = ui.posts.slice(0, 2);
   return `<main class="pad">
     ${viewSwitch()}
     <section class="hero">
       <div class="small">Profissionais unidos · ${esc(viewName(ui.view))}</div>
       <div class="big-n">${members.toLocaleString('pt-BR')}</div>
-      <div class="small">Meta do Brasil: ${CONFIG.goalMembers.toLocaleString('pt-BR')} (${national.toLocaleString('pt-BR')} hoje)</div>
-      <div class="bar"><i style="width:${pct}%"></i></div>
+      ${showBar ? `<div class="small">Próxima meta do Brasil: ${meta.toLocaleString('pt-BR')} (${national.toLocaleString('pt-BR')} hoje)</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>` : `<div class="small">Cada cadastro fortalece a categoria. Convide seus colegas.</div>`}
     </section>
     <h3 class="sec">Mural de atrasos</h3>
     <div class="grid2">
