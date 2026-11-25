@@ -340,8 +340,89 @@ function shortcuts() {
   return `<div class="pills" role="group" aria-label="Filtrar publicações">${SHORTCUTS.filter(([k]) => k !== 'enquete' || Store.mode === 'api').map(([k, i, l]) => `<button type="button" class="pill ${ui.cat === k ? 'on' : ''}" data-action="cat" data-c="${k}">${ic(i, 16)}<span>${k === 'tudo' ? 'Para você' : l}</span></button>`).join('')}</div>`;
 }
 
+/* ---------- Status (24 h) ---------- */
+const storyList = () => { const st = ui.stories; if (!st) return []; return (st.mine.stories.length ? [st.mine] : []).concat(st.groups); };
+function storyBar() {
+  if (Store.mode !== 'api' || !ui.user) return '';
+  const st = ui.stories, mine = st ? st.mine : { stories: [] }, list = storyList(), off = mine.stories.length ? 1 : 0;
+  const me = `<div class="stitem"><button class="stav ${mine.stories.length ? 'ring' : 'add'}" data-action="${mine.stories.length ? 'st-open' : 'new-story'}" data-g="0" aria-label="${mine.stories.length ? 'Ver seu status' : 'Criar status'}">${avatar(ui.user.name, ui.user.avatar)}${mine.stories.length ? '' : `<span class="stplus">${ic('plus', 14)}</span>`}</button>${mine.stories.length ? `<button class="stplus out" data-action="new-story" aria-label="Novo status">${ic('plus', 14)}</button>` : ''}<span class="stname">Seu status</span></div>`;
+  const others = (st ? st.groups : []).map((g, i) => `<div class="stitem"><button class="stav ring ${g.seen ? 'seen' : ''}" data-action="st-open" data-g="${i + off}" aria-label="Status de ${esc(g.name)}">${g.anon ? `<div class="avatar anonst">${ic('user', 22)}</div>` : avatar(g.name, g.avatar)}</button><span class="stname ${g.seen ? 'muted' : 'b'}">${esc(g.anon ? 'Anônimo' : g.name.split(' ')[0])}</span></div>`).join('');
+  return `<div class="stbar" role="group" aria-label="Status">${me}${others}</div>`;
+}
+function stopStory() { ui.sv = null; }
+function modalStory() {
+  const list = storyList(), sv = ui.sv; if (!sv) return '';
+  const g = list[sv.g], s = g && g.stories[sv.i]; if (!s) return '';
+  const head = g.anon ? `<div class="avatar anonst">${ic('user', 18)}</div><div><b>Anônimo</b><small>${ago(s.t)}</small></div>`
+    : `${avatar(g.name, g.avatar)}<div><b>${g.mine ? 'Seu status' : esc(g.name)}</b><small>${ago(s.t)}${g.mine && s.anon ? ' · anônimo' : ''}</small></div>`;
+  const bars = g.stories.map((x, k) => `<i class="${k < sv.i ? 'done' : k === sv.i ? 'cur' : ''}"><b ${k === sv.i ? 'data-cur="1"' : ''}></b></i>`).join('');
+  const body = s.image ? `<img class="stimg" src="${imgUrl(s.image)}" alt="" decoding="async">${s.text ? `<p class="stcap">${esc(s.text)}</p>` : ''}` : `<p class="sttext">${esc(s.text)}</p>`;
+  const foot = s.mine ? `<button class="stbtn" data-action="st-views">${ic('eye', 18)} <span>${s.views || 0}</span>${s.zaps ? ` ${ic('bolt', 15)} <span>${s.zaps}</span>` : ''}</button><button class="stbtn ${sv.del ? 'danger' : ''}" data-action="st-del" aria-label="Apagar status">${ic('trash', 18)}${sv.del ? ' Toque de novo para apagar' : ''}</button>`
+    : `<span class="stexp">Some em ${Math.max(1, Math.ceil((s.t + 86400000 - Date.now()) / 3600000))} h</span><button class="stzap ${s.zapped ? 'on' : ''}" data-action="st-zap" aria-label="Reagir com raio">${ic('bolt', 22)}</button>`;
+  const panel = sv.panel ? `<div class="stpanel"><div class="grab"></div><b>Quem viu</b>${!sv.viewers ? '<p class="muted small">Carregando…</p>' : sv.viewers.map((v) => `<div class="stv-row">${avatar(v.name, v.avatar, 'sm')}<span>${esc(v.name)}</span>${v.zap ? `<span class="zp">${ic('bolt', 14)}</span>` : ''}<small class="muted">${ago(v.t)}</small></div>`).join('') || '<p class="muted small">Ninguém viu ainda.</p>'}<button class="btn out" data-action="st-views">Fechar</button></div>` : '';
+  return `<div class="overlay stv" id="stv"><div class="stwrap sb${s.image ? 'x' : s.bg}"><div class="stprog">${bars}</div>
+    <div class="sthead">${head}<button class="stx" data-action="close-modal" aria-label="Fechar">${ic('x', 22)}</button></div>
+    <div class="stzone" id="stzone">${body}</div>
+    <div class="stfoot">${foot}</div>${panel}</div></div>`;
+}
+function showStory(first) {
+  const list = storyList(), sv = ui.sv; if (!sv) return;
+  const g = list[sv.g], s = g && g.stories[sv.i]; if (!s) return closeModal();
+  if (!s.mine && !s.seen) { s.seen = true; g.seen = g.stories.every((x) => x.seen); Store.viewStory(s.id).catch(() => {}); }
+  sv.del = false;
+  if (first) return;
+  const ov = document.getElementById('stv'); if (!ov) return render();
+  ov.outerHTML = modalStory(); bindStory();
+}
+function stNext() {
+  const list = storyList(), sv = ui.sv; if (!sv) return;
+  const g = list[sv.g];
+  if (sv.i < g.stories.length - 1) { sv.i++; sv.panel = false; return showStory(); }
+  if (sv.g < list.length - 1) { sv.g++; sv.i = 0; sv.panel = false; return showStory(); }
+  closeModal();
+}
+function stPrev() {
+  const list = storyList(), sv = ui.sv; if (!sv) return;
+  if (sv.i > 0) { sv.i--; sv.panel = false; return showStory(); }
+  if (sv.g > 0) { sv.g--; sv.i = list[sv.g].stories.length - 1; sv.panel = false; return showStory(); }
+  sv.panel = false; showStory();
+}
+function bindStory() {
+  const z = document.getElementById('stzone'), ov = document.getElementById('stv'); if (!z || !ov) return;
+  const cur = ov.querySelector('[data-cur]');
+  if (cur) cur.addEventListener('animationend', () => { if (ui.sv) stNext(); });
+  if (ui.sv && ui.sv.panel) ov.classList.add('paused');
+  let t0 = 0, x0 = 0, y0 = 0;
+  z.addEventListener('pointerdown', (e) => { t0 = Date.now(); x0 = e.clientX; y0 = e.clientY; ov.classList.add('paused'); });
+  const up = (e) => {
+    if (!t0) return; const held = Date.now() - t0, dx = e.clientX - x0, dy = e.clientY - y0; t0 = 0;
+    if (!(ui.sv && ui.sv.panel)) ov.classList.remove('paused');
+    if (dy > 90 && Math.abs(dy) > Math.abs(dx)) return closeModal();
+    if (held < 350 && Math.abs(dx) < 14 && Math.abs(dy) < 14) { if (x0 < window.innerWidth * 0.33) stPrev(); else stNext(); }
+  };
+  z.addEventListener('pointerup', up);
+  z.addEventListener('pointercancel', () => { t0 = 0; if (!(ui.sv && ui.sv.panel)) ov.classList.remove('paused'); });
+}
+const STORY_BG_N = 5;
+function modalStoryNew() {
+  const bg = ui.stBg || 0;
+  return sheet('Novo status', `<form data-form="story" novalidate>
+    <div class="snprev sb${bg}" id="snprev"><img id="snimg" alt="" hidden><textarea name="text" id="sntext" maxlength="200" rows="4" placeholder="Digite seu status…"></textarea></div>
+    <div class="snrow">${Array.from({ length: STORY_BG_N }, (_, i) => `<button type="button" class="snc sb${i} ${bg === i ? 'on' : ''}" data-action="st-bg" data-v="${i}" aria-label="Cor ${i + 1}"></button>`).join('')}
+      <input type="file" id="stPhotoIn" accept="image/*" hidden><button type="button" class="photobtn sm" data-action="st-photo" id="stPhotoBtn">${ic('camera', 18)} Foto</button></div>
+    <label class="anonbox"><span class="anontxt"><b>Publicar como anônimo</b><span class="muted small">Seu nome não aparece. Some em 24 horas.</span></span><input type="checkbox" class="sw" name="anon" ${ui.user && ui.user.anon ? 'checked' : ''}></label>
+    <p class="muted small">Quem viu aparece só para você. Não publique dados de pacientes ou exames.</p>
+    <div class="error" id="formError" role="alert"></div>
+    <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" type="submit">Publicar status</button></div></form>`);
+}
+async function loadStories() {
+  if (Store.mode !== 'api' || !ui.user) return;
+  try { ui.stories = await Store.stories(); if (ui.tab === 'inicio' && !ui.modal) { const old = document.querySelector('.stbar'); if (old) { const sc = old.scrollLeft; old.outerHTML = storyBar(); const nb = document.querySelector('.stbar'); if (nb) nb.scrollLeft = sc; } else render(); } } catch { /* sem status */ }
+}
+
 function screenHome() {
   return `<main class="feed">
+    ${storyBar()}
     ${ui.announcement ? `<div class="annc"><div class="anh">${ic('flag', 14)} Aviso do UniRad · ${ago(ui.announcement.t)}</div><div>${richText(ui.announcement.text)}</div></div>` : ''}
     ${shortcuts()}
     ${viewSwitch(Store.mode === 'api')}
@@ -701,7 +782,7 @@ function modalUser() {
   <h4 class="usec">Publicações</h4><div id="uposts">${list}</div>`);
 }
 
-const NIC = { like: 'bolt', clike: 'bolt', comment: 'msg', reply: 'msg', mention: 'msg', follow: 'users', request: 'users', approved: 'users' };
+const NIC = { zapstory: 'bolt', repost: 'repeat', like: 'bolt', clike: 'bolt', comment: 'msg', reply: 'msg', mention: 'msg', follow: 'users', request: 'users', approved: 'users' };
 function modalNotifs() {
   const d = ui.notifs;
   const banner = pushSupported() && !ui.pushOn && (standalone() || !isIOS()) ? `<button class="btn out" data-action="enable-push" style="margin-bottom:8px">Ativar avisos no celular</button>` : '';
@@ -868,16 +949,16 @@ window.addEventListener('popstate', () => {
 
 function render() {
   document.body.classList.toggle('dark-welcome', !ui.user);
-  document.body.classList.toggle('noscroll', ui.modal === 'notifs' || ui.modal === 'place' || ui.modal === 'council' || ui.modal === 'company' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
+  document.body.classList.toggle('noscroll', ui.modal === 'story' || ui.modal === 'notifs' || ui.modal === 'place' || ui.modal === 'council' || ui.modal === 'company' || ui.modal === 'comments' || ui.modal === 'menu' || ui.modal === 'user' || ui.modal === 'zoom');
   if (!ui.user) {
     $app.innerHTML = ui.screen === 'signup' ? screenSignup() : ui.screen === 'login' ? screenLogin() : screenWelcome();
     bindSignup();
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
-  if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom)'); if (ov) ov.classList.add('enter'); }
+  if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom):not(.stv)'); if (ov) ov.classList.add('enter'); }
   ui.prevModal = ui.modal;
   bindModal();
 }
@@ -893,6 +974,7 @@ async function refresh({ quiet = false } = {}) {
       const posts = await Store.posts({ scope, cat: ui.cat });
       if (seq !== ui.seq) return;
       ui.posts = posts.posts; ui.more = posts.more; if (posts.announcement !== undefined) ui.announcement = posts.announcement;
+      if (!quiet || !ui.stories) loadStories();
     } else if (ui.tab === 'atrasos') {
       const [stats, pl, co] = await Promise.all([Store.stats(scope), Store.places(scope).catch(() => ({ places: [] })), Store.companies().catch(() => ({ companies: [] }))]);
       if (seq !== ui.seq) return;
@@ -995,6 +1077,13 @@ function fitSheet() {
 }
 if (window.visualViewport) { window.visualViewport.addEventListener('resize', fitSheet); window.visualViewport.addEventListener('scroll', fitSheet); }
 function bindModal() {
+  if (ui.modal === 'story') bindStory();
+  const sp = document.getElementById('stPhotoIn');
+  if (sp) sp.addEventListener('change', async () => {
+    const f = sp.files && sp.files[0]; if (!f) return;
+    try { ui.stBlob = await processImage(f, 1280, 0.82); const im = document.getElementById('snimg'); im.src = URL.createObjectURL(ui.stBlob); im.hidden = false; document.getElementById('snprev').classList.add('hasimg'); } catch (e) { toast(e.message); }
+    sp.value = '';
+  });
   bindSheetDrag('msheet'); bindSheetDrag('csheet', 'clist'); bindSheetDrag('gsheet'); fitSheet();
   const pin = document.getElementById('photoIn');
   if (pin) {
@@ -1123,6 +1212,26 @@ document.addEventListener('click', async (ev) => {
       try { const r = await Store.supportDemand(d.id); d.sup = r.sup; d.n = r.n; render(); } catch (e) { toast(e.message); } return;
     }
     if (a === 'del-demand') { try { await Store.deleteDemand(el.dataset.id); ui.demands = ui.demands.filter((x) => x.id !== el.dataset.id); render(); toast('Cobrança apagada.'); } catch (e) { toast(e.message); } return; }
+    if (a === 'new-story') { ui.stBg = 0; ui.stBlob = null; return openModal('snew'); }
+    if (a === 'st-bg') { ui.stBg = Number(el.dataset.v); const pv = document.getElementById('snprev'); if (pv) pv.className = pv.className.replace(/sb\d/, 'sb' + ui.stBg) ; document.querySelectorAll('.snc').forEach((b) => b.classList.toggle('on', b === el)); return; }
+    if (a === 'st-photo') { const pi = document.getElementById('stPhotoIn'); if (pi) pi.click(); return; }
+    if (a === 'st-open') { ui.sv = { g: Number(el.dataset.g), i: 0 }; const g = storyList()[ui.sv.g]; if (!g) { ui.sv = null; return; } if (!g.mine) { const k = g.stories.findIndex((x) => !x.seen); ui.sv.i = k < 0 ? 0 : k; } showStory(true); return openModal('story'); }
+    if (a === 'st-zap') { const s = storyList()[ui.sv.g].stories[ui.sv.i]; s.zapped = !s.zapped; el.classList.toggle('on', s.zapped); try { const r = await Store.zapStory(s.id); s.zapped = r.zapped; el.classList.toggle('on', s.zapped); } catch (e) { s.zapped = !s.zapped; el.classList.toggle('on', s.zapped); toast(e.message); } return; }
+    if (a === 'st-views') {
+      const sv = ui.sv; sv.panel = !sv.panel; sv.viewers = null; const s = storyList()[sv.g].stories[sv.i];
+      const ov = document.getElementById('stv'); ov.outerHTML = modalStory(); bindStory();
+      if (sv.panel) { try { const r = await Store.storyViews(s.id); if (ui.sv === sv && sv.panel) { sv.viewers = r.views; const o2 = document.getElementById('stv'); if (o2) { o2.outerHTML = modalStory(); bindStory(); } } } catch (e) { toast(e.message); } }
+      return;
+    }
+    if (a === 'st-del') {
+      const sv = ui.sv; if (!sv.del) { sv.del = true; const ov = document.getElementById('stv'); ov.outerHTML = modalStory(); bindStory(); return; }
+      const g = storyList()[sv.g], s = g.stories[sv.i];
+      try { await Store.deleteStory(s.id); } catch (e) { return toast(e.message); }
+      g.stories.splice(sv.i, 1);
+      if (!g.stories.length) { closeModal(); loadStories(); return toast('Status apagado.'); }
+      if (sv.i >= g.stories.length) sv.i = g.stories.length - 1;
+      sv.del = false; showStory(); return toast('Status apagado.');
+    }
     if (a === 'share-post') { const p = findPost((x) => x.id === el.dataset.id); if (!p) return; ui.sharePost = p; return openModal('sharepost'); }
     if (a === 'repost') {
       const p = ui.sharePost; if (!p) return;
@@ -1361,6 +1470,20 @@ document.addEventListener('submit', async (ev) => {
       finally { busy(f, false); }
       if (ui.modal) { ui.modal = null; popSilently(); } toast('Relato enviado.');
       return refresh();
+    }
+    if (kind === 'story') {
+      const text = String(d.get('text') || '').trim();
+      if (!ui.stBlob && text.length < 2) return err('Escreva algo ou escolha uma foto.');
+      busy(f, true);
+      try {
+        const image = ui.stBlob ? await Store.upload(ui.stBlob) : null;
+        await Store.createStory({ text, bg: ui.stBg || 0, image, anon: !!d.get('anon') });
+        ui.stBlob = null;
+      } catch (e) { busy(f, false); return err(e.message); }
+      busy(f, false);
+      if (ui.modal) { ui.modal = null; popSilently(); }
+      toast('Status publicado.');
+      await loadStories(); return render();
     }
     if (kind === 'post') {
       const text = String(d.get('text') || '').trim();

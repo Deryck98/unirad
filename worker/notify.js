@@ -74,6 +74,7 @@ export function textFor(type, actor, n = 1) {
     case 'mention': return `${who} mencionou você`;
     case 'follow': return `${who} começou a seguir você`;
     case 'request': return `${who} pediu para seguir você`;
+    case 'zapstory': return n > 1 ? `${n} pessoas reagiram ao seu status` : 'Alguém reagiu ao seu status';
     case 'repost': return n > 1 ? `${n} pessoas compartilharam sua publicação` : 'Alguém compartilhou sua publicação';
     case 'placenew': return `Novas avaliações em ${actor || 'um local que você acompanha'}`;
     case 'announce': return 'Novo aviso do UniRad';
@@ -86,7 +87,7 @@ export function textFor(type, actor, n = 1) {
 export async function notify(env, { to, type, actorId = null, actorName = null, ref = null, snippet = '' }) {
   if (!to || to === actorId) return;
   const now = Date.now();
-  if (type === 'like' || type === 'clike' || type === 'placenew' || type === 'repost') {
+  if (type === 'like' || type === 'clike' || type === 'placenew' || type === 'repost' || type === 'zapstory') {
     const ex = await env.DB.prepare('SELECT id FROM notifications WHERE user_id = ? AND type = ? AND ref = ? AND read = 0').bind(to, type, ref).first();
     if (ex) { await env.DB.prepare('UPDATE notifications SET n = n + 1, created_at = ? WHERE id = ?').bind(now, ex.id).run(); return; }
   }

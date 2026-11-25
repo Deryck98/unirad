@@ -158,6 +158,8 @@ async function deleteAccount(req, env, user) {
     env.DB.prepare('DELETE FROM reports WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM poll_votes WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
     env.DB.prepare('DELETE FROM reposts WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)').bind(id, id),
+    env.DB.prepare('DELETE FROM story_views WHERE user_id = ? OR story_id IN (SELECT id FROM stories WHERE user_id = ?)').bind(id, id),
+    env.DB.prepare('DELETE FROM stories WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM posts WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM delays WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').bind(id, id),
@@ -400,6 +402,99 @@ async function toggleLike(env, user, id) {
     if (po) await notify(env, { to: po.user_id, type: 'like', actorId: user.id, ref: id, snippet: po.text });
   }
   return json({ ok: true });
+}
+
+const STORY_TTL = DAY;
+const STORY_BGS = 5;
+
+async function dropExpiredStories(env) {
+  const old = await env.DB.prepare('SELECT id, image FROM stories WHERE created_at < ? LIMIT 30').bind(Date.now() - STORY_TTL).all();
+  for (const r of old.results) {
+    await dropImage(env, r.image);
+    await env.DB.batch([env.DB.prepare('DELETE FROM story_views WHERE story_id = ?').bind(r.id), env.DB.prepare('DELETE FROM stories WHERE id = ?').bind(r.id)]);
+  }
+}
+
+async function listStories(env, user) {
+  await dropExpiredStories(env);
+  const since = Date.now() - STORY_TTL;
+  const rows = await env.DB.prepare(
+    `SELECT s.id, s.user_id, s.text, s.bg, s.image, s.anon, s.created_at,
+       (SELECT name FROM users u WHERE u.id = s.user_id) AS name, (SELECT avatar FROM users u WHERE u.id = s.user_id) AS avatar,
+       (SELECT COUNT(*) FROM story_views v WHERE v.story_id = s.id) AS views,
+       (SELECT COUNT(*) FROM story_views v WHERE v.story_id = s.id AND v.zap = 1) AS zaps,
+       EXISTS (SELECT 1 FROM story_views v WHERE v.story_id = s.id AND v.user_id = ?) AS seen,
+       EXISTS (SELECT 1 FROM story_views v WHERE v.story_id = s.id AND v.user_id = ? AND v.zap = 1) AS zapped
+     FROM stories s
+     WHERE s.created_at > ? AND (
+       s.user_id = ?
+       OR EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = ? AND f.followee_id = s.user_id AND f.status = 'ok')
+       OR (s.region = ? AND (s.anon = 1 OR (SELECT is_private FROM users u WHERE u.id = s.user_id) = 0)))
+     ORDER BY s.created_at ASC LIMIT 200`
+  ).bind(user.id, user.id, since, user.id, user.id, user.region).all();
+  const mine = { userId: user.id, name: user.name, avatar: user.avatar || null, anon: false, mine: true, stories: [] };
+  const groups = new Map(); const anon = { userId: null, name: 'Anônimo', avatar: null, anon: true, mine: false, stories: [] };
+  for (const r of rows.results) {
+    const isMine = r.user_id === user.id;
+    const st = { id: r.id, text: r.text, bg: r.bg, image: r.image || null, t: r.created_at, seen: !!r.seen || isMine, zapped: !!r.zapped, mine: isMine, anon: !!r.anon };
+    if (isMine) { st.views = r.views; st.zaps = r.zaps; mine.stories.push(st); }
+    if (r.anon) { if (!isMine) anon.stories.push(st); continue; }
+    if (isMine) continue;
+    let g = groups.get(r.user_id);
+    if (!g) { g = { userId: r.user_id, name: r.name || 'Profissional', avatar: r.avatar || null, anon: false, mine: false, stories: [] }; groups.set(r.user_id, g); }
+    g.stories.push(st);
+  }
+  const list = [...groups.values()];
+  if (anon.stories.length) list.push(anon);
+  for (const g of list) { g.seen = g.stories.every((x) => x.seen); g.last = g.stories[g.stories.length - 1].t; }
+  list.sort((a, b) => (a.seen - b.seen) || (b.last - a.last));
+  return json({ mine, groups: list });
+}
+
+async function createStory(req, env, user) {
+  const b = await readJson(req);
+  const text = str(b.text, 200);
+  const bg = Math.max(0, Math.min(STORY_BGS - 1, Number(b.bg) | 0));
+  let image = null;
+  if (b.image) { image = str(b.image, 60); await ownUpload(env, user, image); }
+  if (!image && text.length < 2) throw bad('Escreva algo ou escolha uma foto.');
+  const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM stories WHERE user_id = ? AND created_at > ?').bind(user.id, Date.now() - STORY_TTL).first()).n;
+  if (n >= 10) throw new HttpError(429, 'Você já publicou 10 status hoje. Aguarde um deles expirar.');
+  await rateLimit(env, 'stories', user.id, 20, DAY);
+  const id = crypto.randomUUID();
+  await env.DB.prepare('INSERT INTO stories (id, user_id, text, bg, image, anon, region, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, user.id, text, bg, image, b.anon ? 1 : 0, user.region, Date.now()).run();
+  return json({ id }, 201);
+}
+
+async function storyAction(env, user, id, action, m) {
+  const st = await env.DB.prepare('SELECT user_id, anon, image, created_at FROM stories WHERE id = ?').bind(id).first();
+  if (!st || st.created_at < Date.now() - STORY_TTL) throw new HttpError(404, 'Este status não está mais disponível.');
+  if (!action && m === 'DELETE') {
+    if (st.user_id !== user.id) throw new HttpError(403, 'Sem permissão.');
+    await dropImage(env, st.image);
+    await env.DB.batch([env.DB.prepare('DELETE FROM story_views WHERE story_id = ?').bind(id), env.DB.prepare('DELETE FROM stories WHERE id = ?').bind(id)]);
+    return json({ ok: true });
+  }
+  if (action === 'views' && m === 'GET') {
+    if (st.user_id !== user.id) throw new HttpError(403, 'Só quem publicou vê isso.');
+    const r = await env.DB.prepare('SELECT v.user_id AS id, u.name, u.avatar, v.zap, v.created_at AS t FROM story_views v JOIN users u ON u.id = v.user_id WHERE v.story_id = ? ORDER BY v.created_at DESC LIMIT 100').bind(id).all();
+    return json({ views: r.results.map((x) => ({ id: x.id, name: x.name, avatar: x.avatar || null, zap: !!x.zap, t: x.t })) });
+  }
+  if (st.user_id === user.id) return json({ ok: true });
+  if (action === 'view' && m === 'POST') {
+    await env.DB.prepare('INSERT OR IGNORE INTO story_views (story_id, user_id, created_at, zap) VALUES (?, ?, ?, 0)').bind(id, user.id, Date.now()).run();
+    return json({ ok: true });
+  }
+  if (action === 'zap' && m === 'POST') {
+    const cur = await env.DB.prepare('SELECT zap FROM story_views WHERE story_id = ? AND user_id = ?').bind(id, user.id).first();
+    const on = !(cur && cur.zap);
+    if (cur) await env.DB.prepare('UPDATE story_views SET zap = ? WHERE story_id = ? AND user_id = ?').bind(on ? 1 : 0, id, user.id).run();
+    else await env.DB.prepare('INSERT INTO story_views (story_id, user_id, created_at, zap) VALUES (?, ?, ?, ?)').bind(id, user.id, Date.now(), on ? 1 : 0).run();
+    if (on) await notify(env, { to: st.user_id, type: 'zapstory', ref: id, snippet: 'status' });
+    return json({ zapped: on });
+  }
+  throw new HttpError(404, 'Não encontrado.');
 }
 
 async function toggleRepost(env, user, id) {
@@ -878,6 +973,10 @@ export default {
         ]);
         return json({ ok: true });
       }
+      if (p === '/api/stories' && m === 'GET') return await listStories(env, user);
+      if (p === '/api/stories' && m === 'POST') return await createStory(req, env, user);
+      const sm = p.match(/^\/api\/stories\/([0-9a-f-]{36})(?:\/(view|zap|views))?$/);
+      if (sm) return await storyAction(env, user, sm[1], sm[2] || '', m);
       const pm = p.match(/^\/api\/posts\/([0-9a-f-]{36})(?:\/(like|repost|comments|report|vote))?$/);
       if (pm) {
         const [, id, action] = pm;
