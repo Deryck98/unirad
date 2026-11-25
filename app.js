@@ -930,17 +930,44 @@ function updateBell() {
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const pushSupported = () => Store.mode === 'api' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const keyBytes = (k) => { const p = '='.repeat((4 - (k.length % 4)) % 4); const r = atob((k + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, (c) => c.charCodeAt(0)); };
+const isBrave = async () => { try { return !!(navigator.brave && (await navigator.brave.isBrave())); } catch { return false; } };
+async function showPushHelp(subFail) { ui.pushHelp = { brave: await isBrave(), subFail: !!subFail }; if (ui.modal) openOver('pushhelp'); else openModal('pushhelp'); }
+function modalPushHelp() {
+  const h = ui.pushHelp || {};
+  const li = (n, t) => `<li><span>${n}</span><div>${t}</div></li>`;
+  const steps = h.brave
+    ? (h.subFail ? [li(1, '<b>Ligue o push do Brave.</b> Menu ⋮ › Configurações › Privacidade e segurança › <i>Usar serviços do Google para mensagens push</i>.'), li(2, '<b>Volte aqui</b> e toque em tentar de novo.')]
+      : [li(1, '<b>Permita no site.</b> Menu ⋮ › Configurações › Configurações do site › Notificações › UniRad › Permitir.'), li(2, '<b>Ligue o push do Brave.</b> Menu ⋮ › Configurações › Privacidade e segurança › <i>Usar serviços do Google para mensagens push</i>.'), li(3, '<b>Volte aqui</b> e toque em tentar de novo.')])
+    : [li(1, '<b>Permita no site.</b> Toque no ícone ao lado do endereço › Configurações do site › Notificações › Permitir.'), li(2, 'Se não achar: Menu ⋮ › Configurações › Configurações do site › Notificações › UniRad.'), li(3, '<b>Volte aqui</b> e toque em tentar de novo.')];
+  return sheet('Ativar avisos no celular', `<p class="muted small">${h.subFail ? 'O navegador não conseguiu registrar os avisos.' : 'O navegador bloqueou os avisos.'} Faça isto uma vez só${h.brave ? ' (no Brave)' : ''}:</p>
+    <ol class="steps4">${steps.join('')}</ol>
+    <button class="btn" data-action="push-retry">Já fiz, tentar de novo</button>`);
+}
 async function enablePush() {
   if (!pushSupported()) { toast('Este aparelho não aceita avisos.'); return false; }
   if (isIOS() && !standalone()) { toast('No iPhone, instale o app na tela inicial para receber avisos.'); return false; }
-  const perm = await Notification.requestPermission();
-  if (perm !== 'granted') { toast('Permissão negada. Ative os avisos nas configurações do navegador.'); return false; }
+  const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (perm === 'denied') { await showPushHelp(false); return false; }
+  if (perm !== 'granted') { toast('Toque em Permitir para receber avisos.'); return false; }
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes((await Store.pushKey()).key) });
     await Store.pushSub(sub.toJSON());
     ui.pushOn = true; toast('Avisos no celular ligados.'); return true;
-  } catch (e) { toast('Não foi possível ativar os avisos agora.'); return false; }
+  } catch { if (await isBrave()) await showPushHelp(true); else toast('Não foi possível ativar os avisos agora.'); return false; }
+}
+/* convite no momento certo: depois que a pessoa curte, comenta ou segue */
+function maybeAskPush() {
+  try {
+    if (ui.paShown || ui.pushOn || !pushSupported() || Notification.permission !== 'default' || (isIOS() && !standalone())) return;
+    const last = Number(localStorage.getItem('unirad-push-ask') || 0);
+    if (Date.now() - last < 14 * 86400000) return;
+    ui.paShown = true;
+    const d = document.createElement('div'); d.className = 'pushask'; d.setAttribute('role', 'dialog');
+    d.innerHTML = `<div class="pa-ic">${ic('bell', 22)}</div><div class="pa-tx"><b>Quer ser avisado quando responderem?</b><span>Você recebe um aviso no celular, mesmo com o app fechado.</span></div><div class="pa-bt"><button class="btn small" data-action="pa-yes">Ativar</button><button class="btn out small" data-action="pa-no">Agora não</button></div>`;
+    setTimeout(() => document.body.appendChild(d), 900);
+    setTimeout(() => d.remove(), 20000);
+  } catch { /* sem convite */ }
 }
 async function disablePush() {
   try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) { await Store.pushUnsub(sub.endpoint); await sub.unsubscribe(); } } catch { /* ignorado */ }
@@ -1088,7 +1115,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'admin' ? modalAdmin() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'pushhelp' ? modalPushHelp() : ui.modal === 'admin' ? modalAdmin() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom):not(.stv)'); if (ov) ov.classList.add('enter'); }
   ui.prevModal = ui.modal;
@@ -1285,7 +1312,7 @@ document.addEventListener('click', async (ev) => {
       const next = u.state !== 'none' ? 'none' : u.private ? 'pending' : 'ok';
       if (prev.state === 'ok') u.followers -= 1; if (next === 'ok') u.followers += 1;
       u.state = next; render();
-      try { await Store.follow(u.id); } catch (e) { u.state = prev.state; u.followers = prev.followers; render(); toast(e.message); return; }
+      try { await Store.follow(u.id); maybeAskPush(); } catch (e) { u.state = prev.state; u.followers = prev.followers; render(); toast(e.message); return; }
       if (ui.tab === 'inicio' && ui.view === 'seguindo') refresh({ quiet: true });
       return;
     }
@@ -1454,6 +1481,9 @@ document.addEventListener('click', async (ev) => {
       if (ui.user.unread) { ui.user.unread = 0; updateBell(); Store.readNotifs().catch(() => {}); }
       return;
     }
+    if (a === 'pa-yes') { document.querySelector('.pushask')?.remove(); try { localStorage.setItem('unirad-push-ask', String(Date.now())); } catch { /* ok */ } if (await enablePush()) render(); return; }
+    if (a === 'pa-no') { document.querySelector('.pushask')?.remove(); try { localStorage.setItem('unirad-push-ask', String(Date.now())); } catch { /* ok */ } return; }
+    if (a === 'push-retry') { if (await enablePush()) { closeModal(); render(); } return; }
     if (a === 'enable-push') { if (await enablePush()) render(); return; }
     if (a === 'open-followers') { ui.fol = null; openModal('followers'); try { ui.fol = await Store.requests(); } catch (e) { toast(e.message); } if (ui.modal === 'followers') render(); return; }
     if (a === 'req') {
@@ -1554,7 +1584,7 @@ document.addEventListener('click', async (ev) => {
       const flip = () => { p.liked = !p.liked; p.likes = Math.max(0, p.likes + (p.liked ? 1 : -1)); el.classList.toggle('liked', p.liked); el.querySelector('span').textContent = p.likes || ''; };
       flip(); el.classList.remove('pop'); void el.offsetWidth; if (p.liked) el.classList.add('pop');
       el.dataset.busy = '1';
-      try { await Store.toggleLike(p.id); } catch (e) { flip(); toast(e.message); } finally { delete el.dataset.busy; }
+      try { await Store.toggleLike(p.id); if (p.liked) maybeAskPush(); } catch (e) { flip(); toast(e.message); } finally { delete el.dataset.busy; }
       return;
     }
     if (a === 'open-comments') {
@@ -1710,7 +1740,7 @@ document.addEventListener('submit', async (ev) => {
       const p = findPost((x) => x.id === f.dataset.id); if (!p) return;
       const parent = ui.replyTo ? ui.replyTo.id : null, btn = f.querySelector('.csend');
       btn.disabled = true;
-      try { await Store.addComment(p.id, t, ui.cAnon, parent); } finally { btn.disabled = false; }
+      try { await Store.addComment(p.id, t, ui.cAnon, parent); maybeAskPush(); } finally { btn.disabled = false; }
       inp.value = ''; if (parent) ui.rep[parent] = true; ui.replyTo = null; document.getElementById('replybar').hidden = true;
       const r = await Store.posts({ scope: scopeOf(ui.view), cat: ui.cat });
       const np = r.posts.find((x) => x.id === p.id); if (np) p.comments = np.comments;

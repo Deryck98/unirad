@@ -886,3 +886,7 @@ html[data-theme=dark] .atrk div{background:var(--gold)}
 .atag.warn{background:#fff0c2;color:#7a5600}.atag.good{background:#d9f2e2;color:#14532d}.atag.bad{background:#fde0dc;color:#8a1c12}
 .aact{padding:6px 0 12px;border-bottom:1px solid var(--line2)}
 .arow .btn.small.full{flex-basis:100%}
+.pushask{position:fixed;left:12px;right:12px;bottom:84px;z-index:70;background:var(--card);color:var(--text);border:1px solid var(--line2);border-left:4px solid var(--gold);border-radius:16px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.28);display:grid;grid-template-columns:auto 1fr;gap:4px 12px;animation:shup .25s ease}
+.pushask .pa-ic{grid-row:1;width:40px;height:40px;border-radius:12px;background:var(--gold);color:#0b1f3a;display:flex;align-items:center;justify-content:center}
+.pushask .pa-tx{display:flex;flex-direction:column;gap:2px;font-size:13px}.pushask .pa-tx b{font-size:15px}.pushask .pa-tx span{color:var(--muted)}
+.pushask .pa-bt{grid-column:1/-1;display:flex;gap:8px;margin-top:6px}.pushask .pa-bt .btn{flex:1;margin:0;min-height:42px}
