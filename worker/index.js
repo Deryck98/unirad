@@ -5,7 +5,10 @@ const DAY = 86400000;
 const SESSION_DAYS = 30;
 const ROLES = ['Técnico em Radiologia', 'Tecnólogo em Radiologia'];
 const DELAY_TYPES = ['Salário atrasado', 'Pagamento abaixo do piso', 'Hora extra / plantão sem pagar', 'Adicional não pago', 'Outro'];
-const CATS = ['geral', 'vagas', 'cursos', 'enquete'];
+const CATS = ['geral', 'vagas', 'cursos', 'enquete', 'aviso'];
+const TOPICS = { estrutura: 'scale', protecao: 'scale', dosimetro: 'scale', ambiente: 'scale', piso: 'yn', jornada: 'yn', pagamento: 'yn' };
+const KINDS = ['hospital', 'upa', 'clinica', 'outro'];
+const MIN_RATES = 3;
 const PAGE = 20;
 const MAX_IMG = 1500000;
 const KEY_RE = /^[0-9a-f-]{36}\.(jpg|png|webp)$/;
@@ -60,11 +63,11 @@ async function currentUser(req, env) {
   const token = getCookie(req, 'unirad_session');
   if (!token) return null;
   const row = await env.DB.prepare(
-    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.avatar, u.is_private FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
+    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.avatar, u.is_private, u.is_admin FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'
   ).bind(await sha256(token), Date.now()).first();
   return row || null;
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '', private: !!u.is_private });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '', private: !!u.is_private, admin: !!u.is_admin });
 
 async function readJson(req) {
   const ct = req.headers.get('content-type') || '';
@@ -156,6 +159,8 @@ async function deleteAccount(req, env, user) {
     env.DB.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').bind(id, id),
     env.DB.prepare('DELETE FROM notifications WHERE user_id = ? OR actor_id = ?').bind(id, id),
     env.DB.prepare('DELETE FROM push_subs WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM place_rates WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM union_support WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id)
   ]);
@@ -244,7 +249,9 @@ async function listPosts(url, env, user) {
       }
     }
   }
+  const ann = before || authorQ ? null : await env.DB.prepare('SELECT text, created_at FROM announcements WHERE active = 1 ORDER BY created_at DESC LIMIT 1').first();
   return json({
+    announcement: ann ? { text: ann.text, t: ann.created_at } : null,
     posts: posts.map((p) => ({
       id: p.id, cat: p.cat, scope: p.scope, region: p.region,
       author: p.anon ? 'Profissional anônimo' : p.author_name, authorId: p.anon ? null : p.user_id, authorAvatar: p.anon ? null : (p.avatar || null), image: p.image || null,
@@ -254,6 +261,29 @@ async function listPosts(url, env, user) {
     more
   });
 }
+
+const normKey = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/* Resume as avaliações de um local: cada assunto só aparece com 3 respostas ou mais. */
+function summarize(rows) {
+  const out = {};
+  for (const r of rows) {
+    const n = r.n, avg = r.avg, kind = TOPICS[r.topic];
+    const visible = n >= MIN_RATES;
+    const pctNao = kind === 'yn' ? Math.round((r.nao / n) * 100) : null;
+    const pctSim = kind === 'yn' ? Math.round((r.sim / n) * 100) : null;
+    let state = 'mid';
+    if (visible) {
+      if (kind === 'yn') state = r.nao / n >= 0.5 ? 'crit' : r.sim / n >= 0.5 ? 'good' : 'mid';
+      else state = avg < 2.5 ? 'crit' : avg >= 4 ? 'good' : 'mid';
+    }
+    out[r.topic] = { topic: r.topic, kind, n, visible, avg: visible ? Math.round(avg * 10) / 10 : null, pctNao: visible ? pctNao : null, pctSim: visible ? pctSim : null, state };
+  }
+  const vis = Object.values(out).filter((t) => t.visible);
+  const geral = vis.length ? Math.round((vis.reduce((a, t) => a + t.avg, 0) / vis.length) * 10) / 10 : null;
+  return { topics: out, geral, crit: vis.filter((t) => t.state === 'crit').length };
+}
+const RATE_SQL = 'SELECT place_id, topic, COUNT(*) AS n, AVG(value) AS avg, SUM(value = 1) AS nao, SUM(value = 5) AS sim FROM place_rates';
 
 async function rateLimit(env, table, userId, max, windowMs) {
   const n = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ? AND created_at > ?`).bind(userId, Date.now() - windowMs).first()).n;
@@ -316,7 +346,7 @@ async function createPost(req, env, user) {
   let image = null;
   if (b.image) { image = str(b.image, 60); await ownUpload(env, user, image); }
   await rateLimit(env, 'posts', user.id, 20, DAY);
-  const anon = b.anon === false ? 0 : 1;
+  const anon = cat === 'aviso' ? 0 : b.anon === false ? 0 : 1;
   const id = crypto.randomUUID();
   await env.DB.prepare('INSERT INTO posts (id, user_id, cat, scope, region, anon, author_name, text, place, salary, created_at, poll, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(id, user.id, cat, scope, user.region, anon, anon ? null : user.name, text,
@@ -521,6 +551,79 @@ export default {
           q("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ? AND status = 'ok'", um[1])
         ]);
         return json({ user: { ...base, restricted: false, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', posts, followers, following } });
+      }
+      if (p === '/api/places' && m === 'GET') {
+        const sc = url.searchParams.get('scope') || 'brasil';
+        let where = '1=1'; const a = [];
+        if (sc !== 'brasil') { const r = Number(sc); if (!Number.isInteger(r) || r < 1 || r > REGION_MAX) throw bad('Região inválida.'); where = 'region = ?'; a.push(r); }
+        const pl = await env.DB.prepare(`SELECT id, name, kind, region, (SELECT COUNT(DISTINCT user_id) FROM place_rates r WHERE r.place_id = places.id) AS raters FROM places WHERE ${where} ORDER BY raters DESC, created_at DESC LIMIT 60`).bind(...a).all();
+        const ids = pl.results.map((x) => x.id);
+        const rates = ids.length ? await env.DB.prepare(`${RATE_SQL} WHERE place_id IN (${ids.map(() => '?').join(',')}) GROUP BY place_id, topic`).bind(...ids).all() : { results: [] };
+        const by = {}; for (const r of rates.results) (by[r.place_id] ||= []).push(r);
+        return json({ places: pl.results.map((x) => { const sm = summarize(by[x.id] || []); return { id: x.id, name: x.name, kind: x.kind, region: x.region, raters: x.raters, geral: sm.geral, crit: sm.crit }; }) });
+      }
+      if (p === '/api/places' && m === 'POST') {
+        const b = await readJson(req);
+        const name = str(b.name, 80), kind = str(b.kind, 10);
+        if (name.length < 3) throw bad('Digite o nome do local.');
+        if (!KINDS.includes(kind)) throw bad('Escolha o tipo do local.');
+        const key = normKey(name);
+        if (key.length < 3) throw bad('Digite o nome do local.');
+        const ex = await env.DB.prepare('SELECT id FROM places WHERE name_key = ? AND region = ?').bind(key, user.region).first();
+        if (ex) return json({ id: ex.id });
+        await rateLimit(env, 'places', user.id, 5, DAY);
+        const id = crypto.randomUUID();
+        await env.DB.prepare('INSERT OR IGNORE INTO places (id, name, name_key, kind, region, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, name, key, kind, user.region, user.id, Date.now()).run();
+        const row = await env.DB.prepare('SELECT id FROM places WHERE name_key = ? AND region = ?').bind(key, user.region).first();
+        return json({ id: row.id }, 201);
+      }
+      const plm = p.match(/^\/api\/places\/([0-9a-f-]{36})(\/rate)?$/);
+      if (plm && !plm[2] && m === 'GET') {
+        const pl = await env.DB.prepare('SELECT id, name, kind, region FROM places WHERE id = ?').bind(plm[1]).first();
+        if (!pl) throw new HttpError(404, 'Local não encontrado.');
+        const rates = await env.DB.prepare(`${RATE_SQL} WHERE place_id = ? GROUP BY place_id, topic`).bind(plm[1]).all();
+        const mine = await env.DB.prepare('SELECT topic, value FROM place_rates WHERE place_id = ? AND user_id = ?').bind(plm[1], user.id).all();
+        const raters = (await env.DB.prepare('SELECT COUNT(DISTINCT user_id) AS n FROM place_rates WHERE place_id = ?').bind(plm[1]).first()).n;
+        const sm = summarize(rates.results);
+        return json({ place: { ...pl, raters, geral: sm.geral, crit: sm.crit }, topics: sm.topics, mine: Object.fromEntries(mine.results.map((r) => [r.topic, r.value])) });
+      }
+      if (plm && plm[2] && m === 'PUT') {
+        const b = await readJson(req);
+        const topic = str(b.topic, 20), kind = TOPICS[topic];
+        if (!kind) throw bad('Assunto inválido.');
+        if (!(await env.DB.prepare('SELECT 1 AS x FROM places WHERE id = ?').bind(plm[1]).first())) throw new HttpError(404, 'Local não encontrado.');
+        if (b.value === null) { await env.DB.prepare('DELETE FROM place_rates WHERE place_id = ? AND user_id = ? AND topic = ?').bind(plm[1], user.id, topic).run(); return json({ ok: true }); }
+        const v = Number(b.value);
+        if (!Number.isInteger(v) || (kind === 'scale' ? v < 1 || v > 5 : ![1, 3, 5].includes(v))) throw bad('Nota inválida.');
+        await rateLimit(env, 'place_rates', user.id, 150, DAY);
+        await env.DB.prepare('INSERT INTO place_rates (place_id, user_id, topic, value, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (place_id, user_id, topic) DO UPDATE SET value = excluded.value').bind(plm[1], user.id, topic, v, Date.now()).run();
+        return json({ ok: true });
+      }
+      if (p === '/api/announcement' && m === 'POST') {
+        if (!user.is_admin) throw new HttpError(403, 'Só a equipe do UniRad publica avisos oficiais.');
+        const text = str((await readJson(req)).text, 300);
+        if (text.length < 3) throw bad('Escreva o aviso.');
+        const id = crypto.randomUUID(), now = Date.now();
+        await env.DB.batch([
+          env.DB.prepare('UPDATE announcements SET active = 0 WHERE active = 1'),
+          env.DB.prepare('INSERT INTO announcements (id, text, created_at, active) VALUES (?, ?, ?, 1)').bind(id, text, now),
+          env.DB.prepare("INSERT INTO notifications (id, user_id, type, actor_id, actor_name, ref, snippet, n, created_at, read) SELECT lower(hex(randomblob(16))), id, 'announce', NULL, NULL, ?, ?, 1, ?, 0 FROM users WHERE id != ?").bind(id, text.slice(0, 80), now, user.id)
+        ]);
+        return json({ ok: true }, 201);
+      }
+      if (p === '/api/announcement' && m === 'DELETE') {
+        if (!user.is_admin) throw new HttpError(403, 'Só a equipe do UniRad remove avisos oficiais.');
+        await env.DB.prepare('UPDATE announcements SET active = 0 WHERE active = 1').run();
+        return json({ ok: true });
+      }
+      if (p === '/api/union' && m === 'GET') {
+        const [c, mine] = await Promise.all([env.DB.prepare('SELECT COUNT(*) AS n FROM union_support').first(), env.DB.prepare('SELECT 1 AS x FROM union_support WHERE user_id = ?').bind(user.id).first()]);
+        return json({ count: c.n, mine: !!mine });
+      }
+      if (p === '/api/union' && m === 'POST') {
+        const del = await env.DB.prepare('DELETE FROM union_support WHERE user_id = ?').bind(user.id).run();
+        if (!del.meta.changes) await env.DB.prepare('INSERT OR IGNORE INTO union_support (user_id, created_at) VALUES (?, ?)').bind(user.id, Date.now()).run();
+        return json({ ok: true });
       }
       if (p === '/api/notifications' && m === 'GET') {
         const unread = (await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0').bind(user.id).first()).n;

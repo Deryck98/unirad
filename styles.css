@@ -480,3 +480,32 @@ body:not(.dark-welcome){background:#eef3fb}
 .ntxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:14px}
 .ntxt b{font-weight:600}.ntxt small{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ndot{flex:none;width:9px;height:9px;border-radius:50%;background:#f5b301;margin-top:6px}
+
+/* aviso fixo, locais avaliados, avaliacao */
+.annc{margin:10px 12px 0;padding:12px 14px;border-left:4px solid #f5b301;background:#fff8e6;color:#3b2c00;font-size:14px;border-radius:0 10px 10px 0}
+.annc .anh{display:flex;gap:6px;align-items:center;font-size:12px;font-weight:600;color:#7a5600;margin-bottom:4px}
+.btn.gold{background:#f5b301;color:#0b1f3a}
+.geral{font-size:17px;font-weight:700}
+.geral.bad,.tp b.bad{color:#a32d2d}.geral.good,.tp b.good{color:#3b6d11}.geral.mid,.tp b.mid{color:#854f0b}
+.phead2{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.gbox{flex:none;text-align:center;background:#fff8e6;border:1px solid #f5b301;border-radius:12px;padding:6px 14px}
+.gbox span{display:block;font-size:11px;color:#7a5600}.gbox b{font-size:20px;color:var(--navy)}
+.critbox,.goodbox{border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px}
+.critbox{background:#fcebeb;border:1px solid #f09595;color:#791f1f}.goodbox{background:#eaf3de;border:1px solid #97c459;color:#27500a}
+.critbox b,.goodbox b{display:block;margin-bottom:3px}
+.tps{margin:6px 0 12px}
+.tp{padding:9px 0;border-top:1px solid var(--line)}
+.tph{display:flex;justify-content:space-between;font-size:14px}
+.tbar{height:6px;border-radius:3px;background:#e7ecf4;margin:5px 0 3px}
+.tbar i{display:block;height:6px;border-radius:3px;background:#97c459}.tbar i.bad{background:#e24b4a}.tbar i.mid{background:#ef9f27}.tbar i.good{background:#639922}
+.rrow{margin:12px 0}
+.rlabel{font-size:14px;font-weight:600;margin-bottom:6px}
+.rbtns{display:flex;gap:4px}
+.rb{flex:1;min-height:44px;padding:4px 2px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:12px;line-height:1.2;color:var(--text)}
+.rbtns.scale .rb{font-size:11px}
+.rb.s1,.rb.bad{background:#fcebeb;border-color:#f09595;color:#791f1f}.rb.s2{background:#faeeda;border-color:#ef9f27;color:#633806}
+.rb.s3,.rb.mid{background:#fff;color:#444}.rb.s4,.rb.good{background:#eaf3de;border-color:#97c459;color:#27500a}.rb.s5{background:#d6e8c1;border-color:#639922;color:#27500a}
+.rb.on{outline:3px solid var(--navy);outline-offset:-1px;font-weight:700}
+.unioncard{margin-top:14px;padding:14px;border:1px solid #f5b301;background:#fff8e6;border-radius:12px}
+.unioncard b{color:#3b2c00}.unioncard p{font-size:13px;color:#5f4300;margin:4px 0 10px}
+.chip.c-aviso{background:#fff3cf;color:#7a5600}

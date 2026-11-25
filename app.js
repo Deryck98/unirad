@@ -50,9 +50,9 @@ const ICONS = {
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'
 };
 const ic = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
-const CATS = { geral: 'Geral', vagas: 'Vagas', cursos: 'Cursos', enquete: 'Enquete' };
+const CATS = { geral: 'Geral', vagas: 'Vagas', cursos: 'Cursos', enquete: 'Enquete', aviso: 'Aviso' };
 
-const CAT_NAME = { geral: 'Geral', vagas: 'Vaga', cursos: 'Curso', enquete: 'Enquete', direitos: 'Direitos' };
+const CAT_NAME = { geral: 'Geral', vagas: 'Vaga', cursos: 'Curso', enquete: 'Enquete', aviso: 'Aviso', direitos: 'Direitos' };
 const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const scopeOf = (v) => (v === 'mine' ? ui.user.region : v === 'brasil' ? 'brasil' : v === 'seguindo' ? 'seguindo' : Number(v));
 const viewName = (v) => (v === 'seguindo' ? 'Seguindo' : v === 'mine' ? regionLabel(ui.user.region).split(' · ')[0] : v === 'brasil' ? 'Brasil todo' : regionLabel(v).split(' · ')[0]);
@@ -308,6 +308,7 @@ function shortcuts() {
 
 function screenHome() {
   return `<main class="feed">
+    ${ui.announcement ? `<div class="annc"><div class="anh">${ic('flag', 14)} Aviso do UniRad · ${ago(ui.announcement.t)}</div><div>${esc(ui.announcement.text)}</div></div>` : ''}
     ${shortcuts()}
     ${viewSwitch(Store.mode === 'api')}
     ${composer()}
@@ -337,12 +338,87 @@ function screenDelays() {
       <div class="stat red"><div class="small">Relatos</div><div class="n">${delays.total}</div></div>
       <div class="stat amber"><div class="small">Atraso médio</div><div class="n">${delays.avgDays ? delays.avgDays + ' dias' : '—'}</div></div>
     </div>
-    <button class="btn big" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>
+    <div class="row gap8"><button class="btn big" style="flex:1" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>${Store.mode === 'api' ? `<button class="btn big gold" style="flex:1" data-action="pick-place">Avaliar local</button>` : ''}</div>
+    ${Store.mode === 'api' ? placesSection() : ''}
     ${delays.recent && delays.recent.length ? `<h3 class="sec">Relatos recentes</h3><div class="list">${delays.recent.map((r) => `<div class="lrow static"><span>${esc(r.type)}${r.days ? ` · ${r.days} dias` : ''}${r.months > 1 ? ` · ${r.months} meses` : ''}<br><span class="muted small">${ago(r.t)}</span></span><b class="redtxt">${esc(fmtMonth(r.month))}</b></div>`).join('')}</div>` : ''}
     ${delays.top.length ? `<div class="card"><div class="small muted">Locais mais citados</div>${delays.top.map((t) => `<div class="row between li"><span>${esc(t.hospital)}</span><b>${t.n} relatos</b></div>`).join('')}</div>`
       : `<p class="muted small">Locais aparecem aqui quando houver ao menos ${CONFIG.hideHospitalBelow} relatos sobre o mesmo, para proteger quem relata.</p>`}
   </main>`;
 }
+
+/* ---------- locais avaliados ---------- */
+const KIND_NAME = { hospital: 'Hospital', upa: 'UPA', clinica: 'Clínica', outro: 'Outro' };
+const TOPIC_META = [
+  ['piso', 'Paga o piso salarial?', 'yn', ['Sim, paga', 'Não paga', 'Às vezes'], 'Não paga o piso salarial'],
+  ['jornada', 'Cumpre a jornada?', 'yn', ['Cumpre', 'Não cumpre', 'Às vezes'], 'Não cumpre a jornada'],
+  ['pagamento', 'Paga em dia?', 'yn', ['Em dia', 'Atrasa', 'Às vezes'], 'Atrasa o pagamento'],
+  ['estrutura', 'Estrutura e equipamentos', 'scale'],
+  ['protecao', 'Proteção: aventais e blindagem', 'scale'],
+  ['dosimetro', 'Dosímetro e vistoria', 'scale'],
+  ['ambiente', 'Ambiente e respeito', 'scale']
+];
+const WORDS = ['Péssimo', 'Ruim', 'Regular', 'Bom', 'Ótimo'];
+const wordOf = (avg) => WORDS[Math.min(4, Math.max(0, Math.round(avg) - 1))];
+const scoreCls = (v) => (v == null ? '' : v < 2.5 ? 'bad' : v >= 4 ? 'good' : 'mid');
+function placesSection() {
+  const all = ui.places || [], k = ui.pkind || 'todos';
+  const list = all.filter((p) => k === 'todos' || p.kind === k);
+  const chips = [['todos', 'Todos'], ['hospital', 'Hospital'], ['upa', 'UPA'], ['clinica', 'Clínica']].map(([v, l]) => `<button type="button" class="chip2 ${k === v ? 'on' : ''}" data-action="pkind" data-v="${v}">${l}</button>`).join('');
+  const rows = list.map((p) => `<button class="lrow" data-action="open-place" data-id="${p.id}"><span><b>${esc(p.name)}</b><br><span class="muted small">${KIND_NAME[p.kind] || ''} · ${p.raters} ${p.raters === 1 ? 'pessoa avaliou' : 'pessoas avaliaram'}${p.crit ? ` · <span class="redtxt">${p.crit} ${p.crit === 1 ? 'ponto crítico' : 'pontos críticos'}</span>` : ''}</span></span>${p.geral != null ? `<b class="geral ${scoreCls(p.geral)}">${String(p.geral).replace('.', ',')}</b>` : '<span class="muted small">poucas respostas</span>'}</button>`).join('');
+  return `<h3 class="sec">Locais avaliados</h3><div class="chips" role="group" aria-label="Filtrar locais">${chips}</div>
+    ${rows ? `<div class="list">${rows}</div>` : '<p class="muted small">Nenhum local avaliado aqui ainda. Toque em "Avaliar local" para ser o primeiro.</p>'}`;
+}
+function modalPlace() {
+  const d = ui.place; if (!d) return sheet('Local', '<p class="muted small">Carregando…</p>');
+  const { place, topics, mine } = d;
+  const crit = TOPIC_META.filter(([k]) => topics[k] && topics[k].state === 'crit');
+  const good = TOPIC_META.filter(([k]) => topics[k] && topics[k].state === 'good');
+  const critTxt = (m) => { const t = topics[m[0]]; return m[2] === 'yn' ? `${m[4]} (${t.pctNao}%)` : `${m[1]}: ${wordOf(t.avg)}`; };
+  const goodTxt = (m) => { const t = topics[m[0]]; return m[2] === 'yn' ? `${m[1].replace('?', '')}: sim (${t.pctSim}%)` : `${m[1]}: ${wordOf(t.avg)}`; };
+  const bar = (m) => {
+    const t = topics[m[0]];
+    if (!t || !t.visible) return `<div class="tp"><div class="tph"><span>${m[1]}</span><span class="muted small">poucas respostas</span></div></div>`;
+    const pct = m[2] === 'yn' ? t.pctNao : null;
+    const val = m[2] === 'yn' ? (t.state === 'crit' ? m[3][1] : t.state === 'good' ? m[3][0] : m[3][2]) : wordOf(t.avg);
+    const w = m[2] === 'yn' ? t.pctNao : Math.round((t.avg / 5) * 100);
+    const cls = m[2] === 'yn' ? (t.state === 'crit' ? 'bad' : t.state === 'good' ? 'good' : 'mid') : scoreCls(t.avg);
+    return `<div class="tp"><div class="tph"><span>${m[1]}</span><b class="${cls}">${val}</b></div><div class="tbar"><i class="${cls}" style="width:${Math.max(4, w)}%"></i></div><div class="muted small">${m[2] === 'yn' ? `${pct}% dizem que não · ` : ''}${t.n} ${t.n === 1 ? 'resposta' : 'respostas'}</div></div>`;
+  };
+  return sheet(place.name, `<div class="phead2"><div class="muted small">${KIND_NAME[place.kind] || ''} · ${place.raters} ${place.raters === 1 ? 'pessoa avaliou' : 'pessoas avaliaram'} · avaliações anônimas</div>
+    ${d.place.geral != null ? `<div class="gbox"><span>Geral</span><b>${String(d.place.geral).replace('.', ',')}</b></div>` : ''}</div>
+    ${crit.length ? `<div class="critbox"><b>${crit.length} ${crit.length === 1 ? 'ponto crítico' : 'pontos críticos'}</b>${crit.map((m) => `<div>${esc(critTxt(m))}</div>`).join('')}</div>` : ''}
+    ${good.length ? `<div class="goodbox"><b>Pontos bons</b>${good.map((m) => `<div>${esc(goodTxt(m))}</div>`).join('')}</div>` : ''}
+    ${d.place.geral == null ? '<p class="muted small">Cada assunto só aparece depois de 3 respostas, para proteger quem avalia.</p>' : ''}
+    <div class="tps">${TOPIC_META.map(bar).join('')}</div>
+    <button class="btn" data-action="rate-place" data-id="${place.id}">${Object.keys(mine).length ? 'Mudar minha avaliação' : 'Avaliar este local'}</button>`);
+}
+function modalRate() {
+  const d = ui.place; if (!d) return sheet('Avaliar', '<p class="muted small">Carregando…</p>');
+  const mine = d.mine || {};
+  const row = (m) => {
+    const [k, label, kind, opts] = m;
+    const v = mine[k];
+    const ctl = kind === 'yn'
+      ? [[5, opts[0], 'good'], [1, opts[1], 'bad'], [3, opts[2], 'mid']].map(([val, l, c]) => `<button type="button" class="rb ${c} ${v === val ? 'on' : ''}" data-action="rate" data-t="${k}" data-v="${val}">${l}</button>`).join('')
+      : WORDS.map((w, i) => `<button type="button" class="rb s${i + 1} ${v === i + 1 ? 'on' : ''}" data-action="rate" data-t="${k}" data-v="${i + 1}">${w}</button>`).join('');
+    return `<div class="rrow"><div class="rlabel">${label}</div><div class="rbtns ${kind}">${ctl}</div></div>`;
+  };
+  return sheet(d.place.name, `<p class="muted small">Responda só o que você sabe e pule o resto. Toque de novo para tirar a resposta. É anônimo.</p>
+    ${TOPIC_META.map(row).join('')}
+    <button class="btn" data-action="rate-done">Concluir</button>`);
+}
+function modalPick() {
+  const q = normQ(ui.pickName || ''), all = ui.places || [];
+  const sug = q.length >= 2 ? all.filter((p) => normQ(p.name).includes(q)).slice(0, 4) : [];
+  return sheet('Avaliar local', `<div class="chips" role="group" aria-label="Tipo do local">${['hospital', 'upa', 'clinica', 'outro'].map((v) => `<button type="button" class="chip2 ${ui.pickKind === v ? 'on' : ''}" data-action="pick-kind" data-v="${v}">${KIND_NAME[v]}</button>`).join('')}</div>
+    <label>Nome do local<input id="pickName" maxlength="80" placeholder="Ex.: Hospital Santa Maria" value="${esc(ui.pickName || '')}" autocomplete="off"></label>
+    <div id="pickSug">${sug.map((p) => `<button type="button" class="lrow" data-action="open-rate" data-id="${p.id}"><span><b>${esc(p.name)}</b><br><span class="muted small">${KIND_NAME[p.kind] || ''} · já avaliado</span></span>${ic('chev', 18)}</button>`).join('')}</div>
+    <div class="error" id="formError" role="alert"></div>
+    <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" data-action="pick-go">Continuar</button></div>`);
+}
+const normQ = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+async function loadPlace(id) { ui.place = null; render(); ui.place = await Store.place(id); }
+async function refreshPlaces() { try { const r = await Store.places(scopeOf(ui.view === 'seguindo' ? 'mine' : ui.view)); ui.places = r.places; } catch { /* ignorado */ } }
 
 const RIGHTS = [
   ['Jornada de trabalho', 'A Lei 7.394/1985 prevê jornada de 24 horas semanais para os profissionais das técnicas radiológicas. Se o seu contrato é diferente, anote horários e guarde comprovantes.'],
@@ -354,6 +430,10 @@ function screenRights() {
   return `<main class="pad"><h2>Direitos</h2>
     <p class="muted small">Informativo geral, não é aconselhamento jurídico. Confira sempre o texto atual da lei.</p>
     <div class="list">${RIGHTS.map(([t, b]) => `<details class="acc2"><summary><span>${esc(t)}</span>${ic('chev', 18)}</summary><p>${esc(b)}</p></details>`).join('')}</div>
+    <div class="list"><a class="lrow" target="_blank" rel="noopener" href="https://www.conter.gov.br"><span>CONTER e CRTRs<br><span class="muted small">No site do CONTER você encontra o CRTR da sua região.</span></span>${ic('chev', 18)}</a></div>
+    ${Store.mode === 'api' && ui.union ? `<div class="unioncard"><b>Um sindicato para a nossa categoria</b>
+      <p>${ui.union.count >= 10 ? `${ui.union.count} profissionais já apoiam. ` : 'Seja um dos primeiros a apoiar. '}Seu apoio conta e ninguém vê seu nome.</p>
+      <button class="btn ${ui.union.mine ? 'out' : 'gold'}" data-action="union">${ui.union.mine ? 'Apoiando (tocar para retirar)' : 'Quero apoiar'}</button></div>` : ''}
   </main>`;
 }
 
@@ -385,6 +465,7 @@ function screenProfile() {
     <div class="list">
       <label class="lrow"><span>Começar posts como anônimo</span><input type="checkbox" class="sw" data-action="toggle-anon" ${u.anon ? 'checked' : ''}></label>
       ${api ? `<label class="lrow"><span>Perfil privado<small class="muted">Só quem você aprovar vê sua bio e publicações.</small></span><input type="checkbox" class="sw" data-action="toggle-private" ${u.private ? 'checked' : ''}></label>
+      ${api && u.admin ? `<button class="lrow" data-action="open-announce"><span>Publicar aviso do UniRad</span>${ic('chev', 18)}</button>` : ''}
       ${pushSupported() ? `<label class="lrow"><span>Avisos no celular<small class="muted">${standalone() || !isIOS() ? 'Receba avisos mesmo com o app fechado.' : 'No iPhone, instale o app na tela inicial primeiro.'}</small></span><input type="checkbox" class="sw" data-action="toggle-push" ${ui.pushOn ? 'checked' : ''}></label>` : ''}
       <button class="lrow" data-action="open-followers"><span>Seguidores e pedidos${u.pending ? `<b class="badge">${u.pending}</b>` : ''}</span>${ic('chev', 18)}</button>` : ''}
       <a class="lrow" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(INVITE())}"><span>Convidar pelo WhatsApp</span>${ic('chev', 18)}</a>
@@ -470,6 +551,13 @@ async function pollUnread() {
 setInterval(pollUnread, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) pollUnread(); });
 
+function modalAnnounce() {
+  return sheet('Aviso do UniRad', `<form data-form="announce" novalidate><p class="muted small">Aparece fixo no topo do Início para todos e vira um aviso no sino. Substitui o aviso atual.</p>
+    <label>Texto do aviso<textarea name="text" rows="4" maxlength="300" required placeholder="Ex.: Reunião da categoria sábado, 10h."></textarea></label>
+    <div class="error" id="formError" role="alert"></div>
+    <div class="row gap8 stickybtns"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" style="flex:2" type="submit">Publicar aviso</button></div></form>
+    ${ui.announcement ? '<button class="btn out" data-action="remove-announce" style="margin-top:10px">Remover aviso atual</button>' : ''}`);
+}
 function modalFollowers() {
   const d = ui.fol;
   const row = (r, btns) => `<div class="frow">${avatar(r.name, r.avatar, 'sm')}<button class="fname" data-action="view-user" data-id="${r.id}">${esc(r.name)}</button>${btns}</div>`;
@@ -519,8 +607,8 @@ function updateDelayCal() {
 function modalPost() {
   const c = ui.postCat;
   return sheet(c === 'enquete' ? 'Nova enquete' : 'Nova publicação', `<form data-form="post" novalidate>
-    <div class="chips" role="group" aria-label="Tipo">${[['geral', 'Geral'], ['vagas', 'Vaga'], ['cursos', 'Curso'], ['enquete', 'Enquete']].map(([v, l]) => `<button type="button" class="chip2 ${c === v ? 'on' : ''}" data-action="chip" data-for="catSel" data-v="${v}">${l}</button>`).join('')}</div>
-    <select name="cat" id="catSel" hidden><option value="geral" ${c === 'geral' ? 'selected' : ''}>Geral</option><option value="vagas" ${c === 'vagas' ? 'selected' : ''}>Vaga</option><option value="cursos" ${c === 'cursos' ? 'selected' : ''}>Curso / capacitação</option>${Store.mode === 'api' ? `<option value="enquete" ${c === 'enquete' ? 'selected' : ''}>Enquete</option>` : ''}</select>
+    <div class="chips" role="group" aria-label="Tipo">${[['geral', 'Geral'], ['vagas', 'Vaga'], ['cursos', 'Curso'], ['enquete', 'Enquete'], ['aviso', 'Aviso']].map(([v, l]) => `<button type="button" class="chip2 ${c === v ? 'on' : ''}" data-action="chip" data-for="catSel" data-v="${v}">${l}</button>`).join('')}</div>
+    <select name="cat" id="catSel" hidden><option value="geral" ${c === 'geral' ? 'selected' : ''}>Geral</option><option value="vagas" ${c === 'vagas' ? 'selected' : ''}>Vaga</option><option value="cursos" ${c === 'cursos' ? 'selected' : ''}>Curso / capacitação</option>${Store.mode === 'api' ? `<option value="enquete" ${c === 'enquete' ? 'selected' : ''}>Enquete</option><option value="aviso" ${c === 'aviso' ? 'selected' : ''}>Aviso</option>` : ''}</select>
     <label><span id="textLabel">${c === 'enquete' ? 'Pergunta' : 'Texto'}</span> <i class="req">*</i><textarea name="text" required maxlength="800" rows="4" placeholder="Escreva aqui"></textarea></label>
     <div id="vagaExtra" ${c === 'vagas' ? '' : 'hidden'}>
       <label>Local<input name="place" maxlength="80" placeholder="Hospital ou clínica"></label>
@@ -594,7 +682,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   bindModal();
 }
@@ -609,11 +697,15 @@ async function refresh({ quiet = false } = {}) {
     if (ui.tab === 'inicio') {
       const posts = await Store.posts({ scope, cat: ui.cat });
       if (seq !== ui.seq) return;
-      ui.posts = posts.posts; ui.more = posts.more;
+      ui.posts = posts.posts; ui.more = posts.more; if (posts.announcement !== undefined) ui.announcement = posts.announcement;
     } else if (ui.tab === 'atrasos') {
-      const stats = await Store.stats(scope);
+      const [stats, pl] = await Promise.all([Store.stats(scope), Store.places(scope).catch(() => ({ places: [] }))]);
       if (seq !== ui.seq) return;
-      ui.stats = stats;
+      ui.stats = stats; ui.places = pl.places;
+    } else if (ui.tab === 'direitos') {
+      render();
+      if (Store.mode === 'api') { try { ui.union = await Store.union(); if (ui.tab === 'direitos') render(); } catch { /* ignorado */ } }
+      return;
     } else { return render(); }
   } catch (e) {
     if (seq !== ui.seq) return;
@@ -718,7 +810,7 @@ function bindModal() {
   }
   const ac = document.getElementById('anonChk');
   if (ac) {
-    const hint = () => { document.getElementById('anonHint').textContent = ac.checked ? 'Aparece como "Profissional anônimo". Os colegas não saberão que foi você.' : `Aparece com seu nome: ${ui.user.name}`; };
+    const hint = () => { if (document.getElementById('catSel') && document.getElementById('catSel').value === 'aviso') { ac.checked = false; ac.disabled = true; document.getElementById('anonHint').textContent = 'Avisos sempre mostram seu nome.'; return; } ac.disabled = false; document.getElementById('anonHint').textContent = ac.checked ? 'Aparece como "Profissional anônimo". Os colegas não saberão que foi você.' : `Aparece com seu nome: ${ui.user.name}`; };
     ac.addEventListener('change', hint); hint();
   }
   const c = document.getElementById('catSel');
@@ -726,6 +818,7 @@ function bindModal() {
     document.getElementById('vagaExtra').hidden = c.value !== 'vagas';
     document.getElementById('pollExtra').hidden = c.value !== 'enquete';
     document.getElementById('textLabel').textContent = c.value === 'enquete' ? 'Pergunta' : 'Texto';
+    if (ac) ac.dispatchEvent(new Event('change'));
   });
 }
 const err = (m) => { const e = document.getElementById('formError'); if (e) e.textContent = m; };
@@ -763,6 +856,30 @@ document.addEventListener('click', async (ev) => {
       if (ui.tab === 'inicio' && ui.view === 'seguindo') refresh({ quiet: true });
       return;
     }
+    if (a === 'pkind') { ui.pkind = el.dataset.v; return render(); }
+    if (a === 'pick-place') { ui.pickKind = 'hospital'; ui.pickName = ''; openModal('pick'); return; }
+    if (a === 'pick-kind') { ui.pickKind = el.dataset.v; const inp = document.getElementById('pickName'); if (inp) ui.pickName = inp.value; return render(); }
+    if (a === 'pick-go') {
+      const inp = document.getElementById('pickName'); ui.pickName = inp ? inp.value : ui.pickName;
+      const name = String(ui.pickName || '').trim().replace(/\s+/g, ' ');
+      if (name.length < 3) return err('Digite o nome do local.');
+      const id = await Store.createPlace(name, ui.pickKind);
+      await loadPlace(id); ui.modal = 'rate'; return render();
+    }
+    if (a === 'open-rate') { await loadPlace(el.dataset.id); ui.modal = 'rate'; return render(); }
+    if (a === 'open-place') { ui.place = null; openModal('place'); ui.place = await Store.place(el.dataset.id); if (ui.modal === 'place') render(); return; }
+    if (a === 'rate-place') { ui.modal = 'rate'; return render(); }
+    if (a === 'rate') {
+      const d = ui.place, t = el.dataset.t, v = Number(el.dataset.v);
+      const same = d.mine[t] === v, prev = d.mine[t];
+      if (same) delete d.mine[t]; else d.mine[t] = v; render();
+      try { await Store.ratePlace(d.place.id, t, same ? null : v); } catch (e) { if (prev === undefined) delete d.mine[t]; else d.mine[t] = prev; render(); toast(e.message); }
+      return;
+    }
+    if (a === 'rate-done') { const id = ui.place.place.id; ui.place = await Store.place(id); await refreshPlaces(); ui.modal = 'place'; render(); toast('Avaliação salva. Obrigado!'); return; }
+    if (a === 'union') { try { await Store.toggleUnion(); ui.union = await Store.union(); render(); } catch (e) { toast(e.message); } return; }
+    if (a === 'open-announce') { openModal('announce'); return; }
+    if (a === 'remove-announce') { if (confirm('Remover o aviso atual?')) { await Store.removeAnnounce(); ui.announcement = null; closeModal(); toast('Aviso removido.'); refresh({ quiet: true }); } return; }
     if (a === 'open-notifs') {
       ui.notifs = null; openModal('notifs');
       try { ui.notifs = await Store.notifs(); } catch (e) { toast(e.message); return; }
@@ -1007,6 +1124,13 @@ document.addEventListener('submit', async (ev) => {
       Object.assign(ui.user, p); toast('Perfil salvo.'); if (ui.modal === 'editprofile') closeModal();
       return refresh({ quiet: true });
     }
+    if (kind === 'announce') {
+      const t = String(d.get('text') || '').trim();
+      if (t.length < 3) return err('Escreva o aviso.');
+      busy(f, true);
+      try { await Store.announce(t); } finally { busy(f, false); }
+      ui.announcement = { text: t, t: Date.now() }; closeModal(); toast('Aviso publicado.'); return refresh({ quiet: true });
+    }
     if (kind === 'edit') {
       const t = String(d.get('text') || '').trim();
       if (t.length < 3) return err('Escreva algo na publicação.');
@@ -1075,6 +1199,13 @@ document.addEventListener('input', (ev) => {
   if (!list.length) { ml.hidden = true; return; }
   ml.innerHTML = list.map((n) => `<button type="button" class="mrow" data-action="pick-mention" data-name="${esc(n)}">${avatar(n, null, 'sm')}<span>${esc(n)}</span></button>`).join('');
   ml.hidden = false;
+});
+document.addEventListener('input', (ev) => {
+  if (ev.target.id !== 'pickName') return;
+  ui.pickName = ev.target.value;
+  const q = normQ(ui.pickName), box = document.getElementById('pickSug'); if (!box) return;
+  const sug = q.length >= 2 ? (ui.places || []).filter((p) => normQ(p.name).includes(q)).slice(0, 4) : [];
+  box.innerHTML = sug.map((p) => `<button type="button" class="lrow" data-action="open-rate" data-id="${p.id}"><span><b>${esc(p.name)}</b><br><span class="muted small">${KIND_NAME[p.kind] || ''} · já avaliado</span></span>${ic('chev', 18)}</button>`).join('');
 });
 document.addEventListener('pointerdown', (ev) => { if (ev.target.closest('#mlist')) ev.preventDefault(); });
 

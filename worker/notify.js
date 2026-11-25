@@ -74,6 +74,7 @@ export function textFor(type, actor, n = 1) {
     case 'mention': return `${who} mencionou você`;
     case 'follow': return `${who} começou a seguir você`;
     case 'request': return `${who} pediu para seguir você`;
+    case 'announce': return 'Novo aviso do UniRad';
     case 'approved': return `${who} aceitou seu pedido para seguir`;
     default: return 'Novo aviso';
   }
