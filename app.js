@@ -134,19 +134,21 @@ function screenSignup() {
     <h2>Criar cadastro</h2>
     <p class="muted">Só profissionais da radiologia. Leva 1 minuto.</p>
     <form data-form="signup" novalidate>
-      <label>Nome completo<input name="name" autocomplete="name" required minlength="5" placeholder="Seu nome"></label>
-      <label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
-      <label>Senha<input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="Mínimo 8 caracteres"></label>
-      <label>Número do CRTR<input name="crtr" inputmode="numeric" required placeholder="Ex.: 12345" maxlength="12"></label>
-      <label>Função
-        <select name="role" required><option value="">Selecione</option><option>Técnico em Radiologia</option><option>Tecnólogo em Radiologia</option></select></label>
-      <div class="field">Região do seu CRTR
+      <label>Nome completo <i class="req">*</i><input name="name" autocomplete="name" required minlength="5" placeholder="Seu nome"></label>
+      <label>E-mail <i class="req">*</i><input name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
+      <label>Senha <i class="req">*</i><input name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="Mínimo 6 caracteres"></label>
+      <label>Função <i class="req">*</i>
+        <select name="role" id="roleSel" required><option value="">Selecione</option><option>Técnico em Radiologia</option><option>Tecnólogo em Radiologia</option></select></label>
+      <div class="field">Número do CRTR <i class="req">*</i>
+        <div class="crtrbox"><input name="crtr" id="crtrIn" inputmode="numeric" autocomplete="off" required maxlength="6" placeholder="00000" style="width:5ch" aria-label="Número do CRTR, só os números"><span id="crtrLetter">T</span></div>
+        <div class="muted small">Digite só os números. A letra (T para técnico, N para tecnólogo) entra sozinha.</div></div>
+      <div class="field">Região do seu CRTR <i class="req">*</i>
         <div class="search">${ic('search', 18)}<input id="regionSearch" value="${esc(ui.regionQuery)}" placeholder="Busque: 19, Amazonas, Pará…" autocomplete="off"></div>
         <div class="picked" id="picked">${pickedHtml()}</div>
         <div class="reglist" id="reglist">${regionListHtml()}</div>
       </div>
       <label class="check"><input type="checkbox" name="anon" ${ui.anonDefault ? 'checked' : ''}><span>Postar como anônimo por padrão <span class="muted small">(você escolhe em cada post)</span></span></label>
-      <label class="check"><input type="checkbox" name="terms" required><span>Li e aceito as <a href="#" data-action="show-terms">regras do UniRad</a></span></label>
+      <label class="check"><input type="checkbox" name="terms" required><span>Li e aceito as <a href="#" data-action="show-terms">regras do UniRad</a> <i class="req">*</i></span></label>
       <div class="error" id="formError" role="alert"></div>
       <button class="btn big" type="submit">Criar cadastro</button>
     </form>
@@ -313,6 +315,11 @@ function toast(msg) {
 function bindSignup() {
   const s = document.getElementById('regionSearch');
   if (s) s.addEventListener('input', (e) => { ui.regionQuery = e.target.value; document.getElementById('reglist').innerHTML = regionListHtml(); });
+  const c = document.getElementById('crtrIn'), r = document.getElementById('roleSel'), l = document.getElementById('crtrLetter');
+  if (c && r && l) {
+    const sync = () => { c.value = c.value.replace(/\D/g, '').slice(0, 6); c.style.width = Math.max(5, c.value.length) + 'ch'; l.textContent = r.value.startsWith('Tecnólogo') ? 'N' : 'T'; };
+    c.addEventListener('input', sync); r.addEventListener('change', sync); sync();
+  }
 }
 function bindModal() {
   const c = document.getElementById('catSel');
@@ -375,11 +382,12 @@ document.addEventListener('submit', async (ev) => {
       const name = String(d.get('name') || '').trim();
       const email = String(d.get('email') || '').trim();
       const password = String(d.get('password') || '');
-      const crtr = String(d.get('crtr') || '').trim();
+      const digits = String(d.get('crtr') || '').replace(/\D/g, '');
+      const crtr = digits.padStart(5, '0') + (String(d.get('role')).startsWith('Tecnólogo') ? 'N' : 'T');
       if (name.length < 5) return err('Digite seu nome completo.');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return err('Digite um e-mail válido.');
-      if (password.length < 8) return err('A senha precisa ter pelo menos 8 caracteres.');
-      if (!/^[0-9A-Za-z.\-/]{3,12}$/.test(crtr)) return err('Digite o número do CRTR (3 a 12 caracteres).');
+      if (password.length < 6) return err('A senha precisa ter pelo menos 6 caracteres.');
+      if (digits.length < 3 || digits.length > 6) return err('Digite o número do CRTR (só os números).');
       if (!d.get('role')) return err('Escolha sua função.');
       if (!ui.regionPick) return err('Escolha a região do seu CRTR.');
       if (!d.get('terms')) return err('Aceite as regras para continuar.');

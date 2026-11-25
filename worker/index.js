@@ -86,16 +86,19 @@ async function signup(req, env) {
   const b = await readJson(req);
   const name = str(b.name, 80);
   const email = str(b.email, 120).toLowerCase();
-  const crtr = str(b.crtr, 12);
+  const crtrRaw = str(b.crtr, 12).toUpperCase();
   const role = str(b.role, 40);
   const region = Number(b.region);
   const password = String(b.password ?? '');
   if (name.length < 5) throw bad('Digite seu nome completo.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw bad('Digite um e-mail válido.');
-  if (!/^[0-9A-Za-z.\-/]{3,12}$/.test(crtr)) throw bad('Digite o número do CRTR (3 a 12 caracteres).');
   if (!ROLES.includes(role)) throw bad('Escolha sua função.');
+  const m = /^(\d{3,6})([TNA])$/.exec(crtrRaw);
+  if (!m) throw bad('Digite o número do CRTR (só os números; a letra é automática).');
+  if (m[2] !== (role.startsWith('Tecnólogo') ? 'N' : 'T')) throw bad('A letra do CRTR não combina com a função escolhida.');
+  const crtr = m[1].padStart(5, '0') + m[2];
   if (!Number.isInteger(region) || region < 1 || region > REGION_MAX) throw bad('Escolha a região do seu CRTR.');
-  if (password.length < 8 || password.length > 100) throw bad('A senha precisa ter de 8 a 100 caracteres.');
+  if (password.length < 6 || password.length > 100) throw bad('A senha precisa ter de 6 a 100 caracteres.');
 
   const dupe = await env.DB.prepare('SELECT email, crtr FROM users WHERE email = ? OR (region = ? AND crtr = ?)').bind(email, region, crtr).first();
   if (dupe) throw new HttpError(409, dupe.email === email ? 'Esse e-mail já tem cadastro. Use Entrar.' : 'Esse CRTR já está cadastrado nessa região. Se for o seu, use Entrar.');
