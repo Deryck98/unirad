@@ -571,10 +571,16 @@ function bindSheetDrag(sid, scrollId) {
   s.addEventListener('touchend', end); s.addEventListener('touchcancel', end);
 }
 function fitSheet() {
-  const ov = document.getElementById('cov'), v = window.visualViewport; if (!ov || !v) return;
-  ov.style.top = v.offsetTop + 'px'; ov.style.height = v.height + 'px'; ov.style.bottom = 'auto';
-  const s = document.getElementById('csheet');
-  if (s) { const kb = v.height < window.screen.height * 0.7; s.style.height = Math.round(kb ? v.height - 6 : v.height * 0.88) + 'px'; }
+  const ov = document.getElementById('cov'), s = document.getElementById('csheet'), v = window.visualViewport;
+  if (!ov || !v) return;
+  if (v.height < window.innerHeight - 60) {
+    /* navegador que não encolhe a página com o teclado: ajusta na mão */
+    ov.style.top = v.offsetTop + 'px'; ov.style.height = v.height + 'px'; ov.style.bottom = 'auto';
+    if (s) s.style.height = Math.round(v.height - 6) + 'px';
+  } else {
+    ov.style.top = ''; ov.style.height = ''; ov.style.bottom = '';
+    if (s) s.style.height = window.innerHeight < window.screen.height * 0.7 ? 'calc(100% - 6px)' : '';
+  }
 }
 if (window.visualViewport) { window.visualViewport.addEventListener('resize', fitSheet); window.visualViewport.addEventListener('scroll', fitSheet); }
 function bindModal() {
