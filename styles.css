@@ -189,7 +189,7 @@ body.dark-welcome{background:var(--navy)}
 .drow[hidden],#vagaExtra[hidden],#pollExtra[hidden]{display:none}
 .composer .fake{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .invite{padding:14px}.invite p{margin:2px 0 8px}
-.btn.wa{background:#1fa855;color:#fff;text-decoration:none}
+.btn.wa{background:#14803d;color:#fff;text-decoration:none}
 .linkname{font:inherit;font-weight:600;color:inherit;padding:0;text-align:left}
 .linkname:active{text-decoration:underline}
 .ublk{margin:10px 0}.ublk p{margin:2px 0 0}
@@ -826,7 +826,7 @@ html[data-theme=dark] .story .lbl{color:var(--text)}
 .btn{background:var(--gold);color:var(--navy);font-weight:800;border-radius:26px;white-space:nowrap}
 .btn:disabled{opacity:.6}
 .btn.out{background:transparent;border:1.5px solid var(--navy);color:var(--navy);font-weight:700}
-.btn.wa{background:#1fa855;color:#fff}
+.btn.wa{background:#14803d;color:#fff}
 .btn.danger{color:var(--red);border-color:var(--red)}
 .btn.slim{background:transparent;border:0;color:#8fb8ff}
 .stickybtns .btn.out{flex:1}
@@ -841,7 +841,7 @@ input.sw:checked{background:var(--gold)}
 .utabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;border-radius:3px;background:var(--gold)}
 .unioncard.plain{background:var(--card);border:1px solid var(--line2);border-left:4px solid var(--gold);border-radius:14px}
 .unioncard.plain b{color:var(--text)}.unioncard.plain p{color:var(--muted)}
-html[data-theme=dark] .btn.wa{background:#1fa855;color:#fff}
+html[data-theme=dark] .btn.wa{background:#14803d;color:#fff}
 html[data-theme=dark] .btn.out{background:transparent;border-color:rgba(255,255,255,.5);color:#eef3ff}
 html[data-theme=dark] .btn.danger{color:#ff8a80;border-color:#ff8a80}
 html[data-theme=dark] .phd h2{color:var(--text)}
@@ -936,3 +936,26 @@ html[data-theme=dark] .empty .emic{color:var(--gold)}
 .cres.plain{background:var(--bg2,#f0f3f8);color:var(--text)}html[data-theme=dark] .cres.plain{background:#1b2538;color:#e8edf6}
 .money{font-weight:700;letter-spacing:.2px}
 #gsheet .utabs{margin:6px 0 10px}
+/* ---- capas do perfil ---- */
+.cv0{background:linear-gradient(135deg,#0b1f3a 0%,#1d4f8f 70%,#f5b301 190%)!important}
+.cv1{background:linear-gradient(135deg,#0d3b2e 0%,#1f8a5b 75%,#f5b301 200%)!important}
+.cv2{background:linear-gradient(135deg,#2a1450 0%,#6b3fb5 75%,#f58ac1 200%)!important}
+.cv3{background:linear-gradient(135deg,#7a2e0a 0%,#e0701f 75%,#f5d301 200%)!important}
+.cv4{background:linear-gradient(135deg,#4a0d1f 0%,#b3263f 75%,#f5b301 200%)!important}
+.cv5{background:linear-gradient(135deg,#1c2430 0%,#47566b 75%,#9fb3cc 200%)!important}
+.covers{display:flex;gap:10px;margin:6px 0 10px}
+.cvsw{width:44px;height:44px;border-radius:50%;border:3px solid transparent;padding:0;cursor:pointer;box-shadow:0 0 0 1px var(--line2)}
+.cvsw.on{border-color:var(--card);box-shadow:0 0 0 3px var(--gold)}
+/* ---- cadastro: progresso ---- */
+.prog{display:flex;gap:6px;margin:6px 0 14px}.prog i{flex:1;height:5px;border-radius:99px;background:var(--line2)}.prog i.on{background:var(--gold)}
+/* ---- microanimações ---- */
+.btn,.pill,.act,.nav button,.chip2,.srp,.calccard{transition:transform .12s ease,background-color .2s ease,color .2s ease,border-color .2s ease}
+.btn:active,.pill:active,.chip2:active,.calccard:active{transform:scale(.97)}
+.act:active{transform:scale(.88)}
+.nav button.on svg{animation:pop .3s ease}
+.sheet .utabs button{transition:color .2s ease,border-color .2s ease}
+.cres,.chora,.empty{animation:fadeUp .22s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.chip2.on,.pill.on{animation:pop .22s ease}
+.toast{animation:fadeUp .2s ease both}
+@media (prefers-reduced-motion:reduce){.btn,.pill,.act,.nav button,.chip2,.cres,.chora,.empty,.toast{transition:none;animation:none}.nav button.on svg,.chip2.on,.pill.on{animation:none}}

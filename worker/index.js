@@ -66,12 +66,12 @@ async function currentUser(req, env) {
   const token = getCookie(req, 'unirad_session');
   if (!token) return null;
   const row = await env.DB.prepare(
-    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.workplace, u.avatar, u.is_private, u.is_admin, u.verified, u.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.suspended = 0'
+    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.workplace, u.cover, u.avatar, u.is_private, u.is_admin, u.verified, u.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.suspended = 0'
   ).bind(await sha256(token), Date.now()).first();
   if (row && Date.now() - row.last_seen > 3600000) await env.DB.prepare('UPDATE users SET last_seen = ? WHERE id = ?').bind(Date.now(), row.id).run();
   return row || null;
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', workplace: u.workplace || '', avatar: u.avatar || '', private: !!u.is_private, admin: !!u.is_admin, verified: !!u.verified });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', workplace: u.workplace || '', cover: u.cover | 0, avatar: u.avatar || '', private: !!u.is_private, admin: !!u.is_admin, verified: !!u.verified });
 
 async function readJson(req) {
   const ct = req.headers.get('content-type') || '';
@@ -798,6 +798,7 @@ export default {
             env.DB.prepare('UPDATE comments SET author_name = ? WHERE user_id = ?').bind(nm, user.id),
           ]);
         }
+        if ('cover' in b) await env.DB.prepare('UPDATE users SET cover = ? WHERE id = ?').bind(Math.max(0, Math.min(5, Number(b.cover) | 0)), user.id).run();
         if ('workplace' in b) await env.DB.prepare('UPDATE users SET workplace = ? WHERE id = ?').bind(str(b.workplace, 80), user.id).run();
         if ('bio' in b || 'trainings' in b || 'experience' in b) {
           await env.DB.prepare('UPDATE users SET bio = ?, trainings = ?, experience = ? WHERE id = ?')
@@ -829,7 +830,7 @@ export default {
         return json({ ok: true });
       }
       if (um && !um[2] && m === 'GET') {
-        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, workplace, avatar, is_private, verified FROM users WHERE id = ?').bind(um[1]).first();
+        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, workplace, cover, avatar, is_private, verified FROM users WHERE id = ?').bind(um[1]).first();
         if (!u) throw new HttpError(404, 'Perfil não encontrado.');
         const q = async (sql, ...a) => (await env.DB.prepare(sql).bind(...a).first()).n;
         const me = um[1] === user.id;
@@ -841,7 +842,7 @@ export default {
           q("SELECT COUNT(*) AS n FROM follows WHERE followee_id = ? AND status = 'ok'", um[1]),
           q("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ? AND status = 'ok'", um[1])
         ]);
-        return json({ user: { ...base, restricted: false, workplace: u.workplace || '', bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', posts, followers, following } });
+        return json({ user: { ...base, restricted: false, cover: u.cover | 0, workplace: u.workplace || '', bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', posts, followers, following } });
       }
       if (p === '/api/places' && m === 'GET') {
         const sc = url.searchParams.get('scope') || 'brasil';

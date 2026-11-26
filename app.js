@@ -337,6 +337,12 @@ let installEvt = null;
 const standalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 const installBtn = (cls = 'btn out') => (standalone() ? '' : `<button class="${cls}" data-action="install">${ic('download', 18)} Instalar app</button>`);
 
+function catEmpty() {
+  if (ui.cat === 'enquete') return emptyState('poll', 'Nenhuma enquete ainda', 'Crie uma enquete e ouça a opinião dos colegas.', 'new-poll', 'Criar enquete');
+  if (ui.cat === 'vagas') return emptyState('briefcase', 'Nenhuma vaga por aqui', 'Sabe de uma vaga? Divulgue para os colegas.', 'new-post', 'Divulgar vaga');
+  if (ui.cat === 'cursos') return emptyState('book', 'Nenhum curso por aqui', 'Indique um curso ou treinamento que vale a pena.', 'new-post', 'Indicar curso');
+  return emptyState('msg', 'Nada por aqui ainda', 'Seja o primeiro a publicar nesta região.', 'new-post', 'Publicar agora');
+}
 function screenWelcome() {
   return `<main class="welcome">
     <div class="wlogo">${emblem({ size: 128, text: false })}</div>
@@ -385,11 +391,12 @@ function screenSignup() {
     return `<main class="pad fit">
     <button class="ghost back" data-action="go-welcome">← Voltar</button>
     <div class="authlogo"><div class="wlogo">${emblem({ size: 76, text: false })}</div><div class="brand">UniRad</div></div>
-    <h2>Criar cadastro</h2>
+    <div class="prog" aria-label="Passo 1 de 2"><i class="on"></i><i></i></div>
+    <h2>Vamos começar</h2>
     <p class="muted">Passo 1 de 2 · seus dados de acesso</p>
     <form data-form="signup1" novalidate>
       <label>Nome completo <i class="req">*</i><input name="name" autocomplete="name" required minlength="5" placeholder="Seu nome" value="${esc(sd.name || '')}"></label>
-      <p class="muted small" style="margin-top:-4px">Depois você escolhe como seu nome aparece no app (só o primeiro nome, apelido…) em Perfil.</p>
+      <p class="muted small" style="margin-top:-4px">Depois você escolhe como seu nome aparece no app.</p>
       <label>E-mail <i class="req">*</i><input name="email" type="email" autocomplete="email" required placeholder="voce@email.com" value="${esc(sd.email || '')}"></label>
       ${pw('password', 'Senha', 'Mínimo 6 caracteres', 'new-password', sd.password || '')}
       ${pw('password2', 'Confirmar senha', 'Repita a senha', 'new-password', sd.password || '')}
@@ -400,8 +407,9 @@ function screenSignup() {
   }
   return `<main class="pad">
     <button class="ghost back" data-action="signup-back">← Voltar</button>
-    <h2>Criar cadastro</h2>
-    <p class="muted">Passo 2 de 2 · seu registro profissional</p>
+    <div class="prog" aria-label="Passo 2 de 2"><i class="on"></i><i class="on"></i></div>
+    <h2>Seu registro profissional</h2>
+    <p class="muted">Passo 2 de 2 · só quem tem CRTR entra</p>
     <form data-form="signup" novalidate>
       <label>Função <i class="req">*</i>
         <select name="role" id="roleSel" required><option value="">Selecione</option><option>Técnico em Radiologia</option><option>Tecnólogo em Radiologia</option></select></label>
@@ -413,7 +421,7 @@ function screenSignup() {
         <div class="picked" id="picked">${pickedHtml()}</div>
         <div class="reglist short" id="reglist">${regionListHtml()}</div>
       </div>
-      <p class="muted small">Seu perfil é visível para os colegas. Em cada post ou comentário você escolhe se quer publicar de forma anônima.</p>
+      <p class="muted small">${ic('lock', 14)} Seu CRTR nunca aparece para os outros. Em cada post você escolhe se quer ficar anônimo.</p>
       <label class="check"><input type="checkbox" name="terms" required><span>Li e aceito as <a href="#" data-action="show-terms">regras do UniRad</a> <i class="req">*</i></span></label>
       <div class="error" id="formError" role="alert"></div>
       <button class="btn big" type="submit">Criar cadastro</button>
@@ -598,7 +606,7 @@ function screenHome() {
     ${shortcuts()}
     ${viewSwitch(Store.mode === 'api')}
     ${composer()}
-    ${!ui.posts ? loadingBox : ui.posts.map(postCard).join('') || (ui.view === 'seguindo' ? emptyState('users', 'Você ainda não segue ninguém', 'Toque no nome de um colega e escolha Seguir para ver as publicações dele aqui.', 'open-search', 'Buscar colegas') : emptyState('msg', 'Nada por aqui ainda', 'Seja o primeiro a publicar nesta região.', 'new-post', 'Publicar agora'))}
+    ${!ui.posts ? loadingBox : ui.posts.map(postCard).join('') || (ui.view === 'seguindo' ? emptyState('users', 'Você ainda não segue ninguém', 'Toque no nome de um colega e escolha Seguir para ver as publicações dele aqui.', 'open-search', 'Buscar colegas') : catEmpty())}
     ${ui.more ? '<button class="btn out" data-action="load-more">Ver mais publicações</button>' : ''}
   </main>`;
 }
@@ -631,7 +639,7 @@ function screenDelays() {
     </div>
     <div class="row gap8"><button class="btn big" style="flex:1" data-action="new-delay">${ic('plus', 18)} Relatar atraso</button>${Store.mode === 'api' ? `<button class="btn big out" style="flex:1" data-action="pick-place">Avaliar local</button>` : ''}</div>
 
-    ${delays.recent && delays.recent.length ? `<h3 class="sec">Relatos recentes</h3><div class="list">${delays.recent.map((r) => `<div class="lrow static"><span>${esc(r.type)}${r.days ? ` · ${r.days} dias` : ''}${r.months > 1 ? ` · ${r.months} meses` : ''}<br><span class="muted small">${ago(r.t)}</span></span><b class="redtxt">${esc(fmtMonth(r.month))}</b></div>`).join('')}</div>` : ''}
+    ${delays.recent && delays.recent.length ? `<h3 class="sec">Relatos recentes</h3><div class="list">${delays.recent.map((r) => `<div class="lrow static"><span>${esc(r.type)}${r.days ? ` · ${r.days} dias` : ''}${r.months > 1 ? ` · ${r.months} meses` : ''}<br><span class="muted small">${ago(r.t)}</span></span><b class="redtxt">${esc(fmtMonth(r.month))}</b></div>`).join('')}</div>` : emptyState('alert', 'Nenhum relato por aqui', 'Quando alguém relatar um atraso ou pagamento abaixo do piso, aparece aqui. Seu relato pode ser anônimo.', 'new-delay', 'Relatar atraso')}
     ${delays.top.length ? `<div class="card"><div class="small muted">Locais mais citados</div>${delays.top.map((t) => `<div class="row between li"><span>${esc(t.hospital)}</span><b>${t.n} relatos</b></div>`).join('')}</div>`
       : `<p class="muted small">Locais aparecem aqui quando houver ao menos ${CONFIG.hideHospitalBelow} relatos sobre o mesmo, para proteger quem relata.</p>`}
   </main>`;
@@ -891,7 +899,7 @@ function screenRights() {
     ${conselhoSection()}
     ${Store.mode === 'api' && ui.union ? `<div class="unioncard"><b>Um sindicato para a nossa categoria</b>
       <p><b>${ui.union.count}</b> ${ui.union.count === 1 ? 'profissional apoia' : 'profissionais apoiam'} · meta ${unionGoal(ui.union.count)}</p>
-      <div class="ubar" role="progressbar" aria-valuemin="0" aria-valuemax="${unionGoal(ui.union.count)}" aria-valuenow="${ui.union.count}"><i style="width:${Math.max(2, Math.min(100, Math.round((ui.union.count / unionGoal(ui.union.count)) * 100)))}%"></i></div>
+      <div class="ubar" role="progressbar" aria-label="Progresso da meta do sindicato" aria-valuemin="0" aria-valuemax="${unionGoal(ui.union.count)}" aria-valuenow="${ui.union.count}"><i style="width:${Math.max(2, Math.min(100, Math.round((ui.union.count / unionGoal(ui.union.count)) * 100)))}%"></i></div>
       <p class="small">${ui.union.mine ? 'Seu apoio já conta.' : 'Seu apoio conta.'} Ninguém vê seu nome.</p>
       <button class="btn ${ui.union.mine ? 'out' : 'gold'}" data-action="union">${ui.union.mine ? 'Apoiando (tocar para retirar)' : 'Quero apoiar'}</button></div>` : ''}
     <div class="unioncard how plain"><b>Como criar um sindicato</b>
@@ -913,6 +921,7 @@ function profileForm(u) {
       <p class="muted small" style="margin-top:-4px">Pode ser só o primeiro nome, um apelido ou como preferir. Troca também nas suas publicações antigas (as anônimas continuam anônimas).</p>
       <p class="muted small">O resto é opcional. Só aparece para os outros membros quando você posta sem anonimato e alguém toca no seu nome. Seu CRTR, e-mail e senha nunca aparecem.</p>
       <label>Apresentação<input name="bio" maxlength="160" placeholder="Ex.: Técnico em radiologia há 8 anos, em Manaus" value="${esc(u.bio || '')}"></label>
+      <div class="field">Cor da capa<div class="covers" id="covers">${[0, 1, 2, 3, 4, 5].map((i) => `<button type="button" class="cvsw cv${i} ${(u.cover | 0) === i ? 'on' : ''}" data-action="pick-cover" data-v="${i}" aria-label="Capa ${i + 1}"></button>`).join('')}</div><input type="hidden" name="cover" value="${u.cover | 0}"></div>
       <label>Onde trabalha<input name="workplace" maxlength="80" placeholder="Ex.: Hospital Delfina" value="${esc(u.workplace || '')}"></label>
       <label>Capacitações<textarea name="trainings" rows="3" maxlength="500" placeholder="Cursos e treinamentos (tomografia, ressonância, radioproteção…)">${esc(u.trainings || '')}</textarea></label>
       <label>Experiências<textarea name="experience" rows="3" maxlength="500" placeholder="Onde já atuou e em quais áreas">${esc(u.experience || '')}</textarea></label>
@@ -938,7 +947,7 @@ function screenProfile() {
   const u = ui.user, api = Store.mode === 'api';
   const row = (act, label, cls = '') => `<button class="lrow ${cls}" data-action="${act}"><span>${label}</span>${ic('chev', 18)}</button>`;
   return `<main class="prof">
-    <section class="phero"><div class="pcover"></div>
+    <section class="phero"><div class="pcover cv${(u.cover | 0)}"></div>
       <div class="avwrap">${avatar(u.name, u.avatar, 'xl')}${api ? `<input type="file" id="avatarIn" accept="image/*" hidden><button class="avedit" data-action="change-avatar" aria-label="Trocar foto">${ic('camera', 16)}</button>` : ''}</div>
       <h2 class="pname">${esc(u.name)}${vbadge(u.verified)}</h2>
       <div class="muted">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>
@@ -987,7 +996,7 @@ function modalUser() {
   const list = ui.userPosts === null ? '<p class="muted small">Carregando…</p>' : ui.userPosts.length
     ? ui.userPosts.map((p) => `<div class="upost"><div class="muted small">${esc(CAT_NAME[p.cat] || 'Publicação')} · ${ago(p.t)}</div><div>${esc(p.text).slice(0, 220)}${p.text.length > 220 ? '…' : ''}</div></div>`).join('')
     : emptyState('msg', 'Nada por aqui ainda', 'Quando essa pessoa publicar abertamente, aparece aqui.');
-  return sheet(u.name, `<div class="uhero"><div class="pcover"></div>${big}${who}
+  return sheet(u.name, `<div class="uhero"><div class="pcover cv${(u.cover | 0)}"></div>${big}${who}
     ${u.bio ? `<div class="ubio">${esc(u.bio)}</div>` : ''}${u.workplace ? `<div class="pchips"><span class="pchip">${ic('pin', 14)} ${esc(u.workplace)}</span></div>` : ''}
     <div class="ustats"><div><b>${u.posts}</b><span>posts</span></div><div><b id="ufollowers">${u.followers}</b><span>seguidores</span></div><div><b>${u.following}</b><span>seguindo</span></div></div>
     ${followBtn(u)}
@@ -1081,7 +1090,7 @@ function modalFollowers() {
   return sheet('Seguidores e pedidos', `<h4 class="usec">Pedidos (${d.requests.length})</h4>
     ${d.requests.map((r) => row(r, `<button class="btn sm" data-action="req" data-act="approve" data-id="${r.id}">Aprovar</button><button class="btn out sm" data-action="req" data-act="decline" data-id="${r.id}">Recusar</button>`)).join('') || '<p class="muted small">Nenhum pedido no momento.</p>'}
     <h4 class="usec">Seguidores (${d.followers.length})</h4>
-    ${d.followers.map((r) => row(r, `<button class="btn out sm" data-action="req" data-act="remove" data-id="${r.id}">Remover</button>`)).join('') || '<p class="muted small">Ninguém segue você ainda.</p>'}`);
+    ${d.followers.map((r) => row(r, `<button class="btn out sm" data-action="req" data-act="remove" data-id="${r.id}">Remover</button>`)).join('') || emptyState('users', 'Ninguém segue você ainda', 'Publique e comente para os colegas encontrarem você.')}`);
 }
 
 const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -1612,6 +1621,7 @@ document.addEventListener('click', async (ev) => {
       return refresh({ quiet: true });
     }
     if (a === 'copy-link') { try { await navigator.clipboard.writeText(location.origin); toast('Link copiado.'); } catch { toast(location.origin); } return; }
+    if (a === 'pick-cover') { const f = el.closest('form'); f.elements.cover.value = el.dataset.v; f.querySelectorAll('.cvsw').forEach((b) => b.classList.toggle('on', b === el)); const pv = document.querySelector('.cvprev'); return; }
     if (a === 'open-calc') return openModal('calc');
     if (a === 'calc-mode') { ui.calc.mode = el.dataset.v; return render(); }
     if (a === 'calc-esc') {
@@ -1809,7 +1819,7 @@ document.addEventListener('submit', async (ev) => {
     if (kind === 'profile') {
       const dn = String(d.get('dname') || '').trim().replace(/\s+/g, ' ');
       if (dn.length < 2) return err('Digite o nome que vai aparecer (mínimo 2 letras).');
-      const p = { name: dn, bio: String(d.get('bio') || '').trim(), trainings: String(d.get('trainings') || '').trim(), experience: String(d.get('experience') || '').trim(), workplace: String(d.get('workplace') || '').trim() };
+      const p = { name: dn, bio: String(d.get('bio') || '').trim(), trainings: String(d.get('trainings') || '').trim(), experience: String(d.get('experience') || '').trim(), workplace: String(d.get('workplace') || '').trim(), cover: Number(d.get('cover')) || 0 };
       busy(f, true);
       try { await Store.saveProfile(p); } finally { busy(f, false); }
       Object.assign(ui.user, p); toast('Perfil salvo.'); if (ui.modal === 'editprofile') closeModal();
