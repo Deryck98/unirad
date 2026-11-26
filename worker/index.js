@@ -66,12 +66,12 @@ async function currentUser(req, env) {
   const token = getCookie(req, 'unirad_session');
   if (!token) return null;
   const row = await env.DB.prepare(
-    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.avatar, u.is_private, u.is_admin, u.verified, u.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.suspended = 0'
+    'SELECT u.id, u.name, u.role, u.region, u.anon_default, u.bio, u.trainings, u.experience, u.workplace, u.avatar, u.is_private, u.is_admin, u.verified, u.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.suspended = 0'
   ).bind(await sha256(token), Date.now()).first();
   if (row && Date.now() - row.last_seen > 3600000) await env.DB.prepare('UPDATE users SET last_seen = ? WHERE id = ?').bind(Date.now(), row.id).run();
   return row || null;
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', avatar: u.avatar || '', private: !!u.is_private, admin: !!u.is_admin, verified: !!u.verified });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, anon: !!u.anon_default, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', workplace: u.workplace || '', avatar: u.avatar || '', private: !!u.is_private, admin: !!u.is_admin, verified: !!u.verified });
 
 async function readJson(req) {
   const ct = req.headers.get('content-type') || '';
@@ -204,6 +204,30 @@ async function stats(url, env) {
   return json({ members, national, delays: { total, avgDays: avg ? Math.round(avg) : 0, top: top.results, recent: recent.results.map((r) => ({ type: r.type, days: r.days, month: r.from_month, months: r.months, t: r.t })) } });
 }
 
+async function searchAll(url, env, user) {
+  const q = String(url.searchParams.get('q') || '').trim().slice(0, 60);
+  if (q.length < 2) return json({ people: [], posts: [] });
+  const like = `%${q.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+  const type = url.searchParams.get('type') || 'tudo';
+  const out = { people: [], posts: [] };
+  if (type === 'tudo' || type === 'pessoas') {
+    const r = await env.DB.prepare(`SELECT id, name, role, region, avatar, verified, workplace FROM users WHERE suspended = 0 AND (name LIKE ? ESCAPE '\\' OR workplace LIKE ? ESCAPE '\\') ORDER BY verified DESC, name LIMIT 12`).bind(like, like).all();
+    out.people = r.results.map((u) => ({ id: u.id, name: u.name, role: u.role, region: u.region, avatar: u.avatar || '', verified: !!u.verified, workplace: u.workplace || '' }));
+  }
+  if (type !== 'pessoas') {
+    const cat = CATS.includes(type) ? type : '';
+    const r = await env.DB.prepare(
+      `SELECT p.id, p.cat, p.anon, p.author_name, p.text, p.created_at FROM posts p
+       WHERE p.text LIKE ? ESCAPE '\\' AND (p.scope = 'brasil' OR p.region = ?)${cat ? ' AND p.cat = ?' : ''}
+         AND (p.mod_ok = 1 OR (SELECT COUNT(*) FROM reports r WHERE r.post_id = p.id) < ${HIDE_AFTER_REPORTS})
+         AND ((SELECT is_private FROM users uu WHERE uu.id = p.user_id) = 0 OR p.user_id = ? OR EXISTS (SELECT 1 FROM follows ff WHERE ff.follower_id = ? AND ff.followee_id = p.user_id AND ff.status = 'ok'))
+       ORDER BY p.created_at DESC LIMIT 15`
+    ).bind(...[like, user.region, ...(cat ? [cat] : []), user.id, user.id]).all();
+    out.posts = r.results.map((p) => ({ id: p.id, cat: p.cat, author: p.anon ? 'Profissional anônimo' : p.author_name, text: String(p.text).slice(0, 160), t: p.created_at }));
+  }
+  return json(out);
+}
+
 async function listPosts(url, env, user) {
   const scopeQ = url.searchParams.get('scope') || 'brasil';
   const authorQ = url.searchParams.get('author') || '';
@@ -264,7 +288,7 @@ async function listPosts(url, env, user) {
       `SELECT c.id, c.post_id, c.user_id, c.anon, c.author_name, c.text, c.created_at, c.parent_id, (SELECT avatar FROM users u WHERE u.id = c.user_id) AS avatar,
         (SELECT COUNT(*) FROM comment_likes l WHERE l.comment_id = c.id) AS likes,
         EXISTS(SELECT 1 FROM comment_likes l WHERE l.comment_id = c.id AND l.user_id = ?) AS liked
-       FROM comments c WHERE c.post_id IN (${ids.map(() => '?').join(',')}) ORDER BY c.created_at ASC`
+       FROM comments c WHERE c.post_id IN (${ids.map(() => '?').join(',')}) AND (SELECT COUNT(*) FROM comment_reports cr WHERE cr.comment_id = c.id) < ${HIDE_AFTER_REPORTS} ORDER BY c.created_at ASC`
     ).bind(user.id, ...ids).all();
     for (const c of cm.results) byId.get(c.post_id)?.push({ id: c.id, authorId: c.anon ? null : c.user_id, author: c.anon ? 'Profissional anônimo' : c.author_name, text: c.text, t: c.created_at, mine: c.user_id === user.id, parent: c.parent_id || null, avatar: c.anon ? null : (c.avatar || null), likes: c.likes, liked: !!c.liked });
     const pollIds = posts.filter((p) => p.poll).map((p) => p.id);
@@ -774,6 +798,7 @@ export default {
             env.DB.prepare('UPDATE comments SET author_name = ? WHERE user_id = ?').bind(nm, user.id),
           ]);
         }
+        if ('workplace' in b) await env.DB.prepare('UPDATE users SET workplace = ? WHERE id = ?').bind(str(b.workplace, 80), user.id).run();
         if ('bio' in b || 'trainings' in b || 'experience' in b) {
           await env.DB.prepare('UPDATE users SET bio = ?, trainings = ?, experience = ? WHERE id = ?')
             .bind(str(b.bio, 160), str(b.trainings, 500), str(b.experience, 500), user.id).run();
@@ -804,7 +829,7 @@ export default {
         return json({ ok: true });
       }
       if (um && !um[2] && m === 'GET') {
-        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, avatar, is_private, verified FROM users WHERE id = ?').bind(um[1]).first();
+        const u = await env.DB.prepare('SELECT name, role, region, bio, trainings, experience, workplace, avatar, is_private, verified FROM users WHERE id = ?').bind(um[1]).first();
         if (!u) throw new HttpError(404, 'Perfil não encontrado.');
         const q = async (sql, ...a) => (await env.DB.prepare(sql).bind(...a).first()).n;
         const me = um[1] === user.id;
@@ -816,7 +841,7 @@ export default {
           q("SELECT COUNT(*) AS n FROM follows WHERE followee_id = ? AND status = 'ok'", um[1]),
           q("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ? AND status = 'ok'", um[1])
         ]);
-        return json({ user: { ...base, restricted: false, bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', posts, followers, following } });
+        return json({ user: { ...base, restricted: false, workplace: u.workplace || '', bio: u.bio || '', trainings: u.trainings || '', experience: u.experience || '', posts, followers, following } });
       }
       if (p === '/api/places' && m === 'GET') {
         const sc = url.searchParams.get('scope') || 'brasil';
@@ -1063,6 +1088,15 @@ export default {
         return json({ ok: true });
       }
 
+      const crm = p.match(/^\/api\/comments\/([0-9a-f-]{36})\/report$/);
+      if (crm && m === 'POST') {
+        const co = await env.DB.prepare('SELECT user_id FROM comments WHERE id = ?').bind(crm[1]).first();
+        if (!co) throw new HttpError(404, 'Comentário não encontrado.');
+        if (co.user_id === user.id) throw bad('Você não pode denunciar o próprio comentário.');
+        await env.DB.prepare('INSERT OR IGNORE INTO comment_reports (comment_id, user_id, created_at) VALUES (?, ?, ?)').bind(crm[1], user.id, Date.now()).run();
+        return json({ ok: true });
+      }
+      if (p === '/api/search' && m === 'GET') return await searchAll(url, env, user);
       const cmm = p.match(/^\/api\/comments\/([0-9a-f-]{36})$/);
       const clm = p.match(/^\/api\/comments\/([0-9a-f-]{36})\/like$/);
       if (clm && m === 'POST') {

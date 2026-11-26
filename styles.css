@@ -890,3 +890,33 @@ html[data-theme=dark] .atrk div{background:var(--gold)}
 .pushask .pa-ic{grid-row:1;width:40px;height:40px;border-radius:12px;background:var(--gold);color:#0b1f3a;display:flex;align-items:center;justify-content:center}
 .pushask .pa-tx{display:flex;flex-direction:column;gap:2px;font-size:13px}.pushask .pa-tx b{font-size:15px}.pushask .pa-tx span{color:var(--muted)}
 .pushask .pa-bt{grid-column:1/-1;display:flex;gap:8px;margin-top:6px}.pushask .pa-bt .btn{flex:1;margin:0;min-height:42px}
+/* ---- boas-vindas: passos ---- */
+.wsteps{list-style:none;padding:0;margin:18px 0 22px;display:flex;flex-direction:column;gap:14px;text-align:left}
+.wsteps li{display:flex;gap:12px;align-items:center}
+.wsteps li>span{flex:none;width:32px;height:32px;border-radius:50%;background:var(--gold);color:#0b1f3a;font-weight:800;display:flex;align-items:center;justify-content:center}
+.wsteps b{display:block;font-size:15px}.wsteps small{display:block;opacity:.72;font-size:13px}
+/* ---- perfil: capa e chips ---- */
+.pcover{height:84px;margin:-16px -16px 0;background:linear-gradient(135deg,#0b1f3a,#1d4f8f);border-radius:16px 16px 0 0}
+.phero .pcover+.avwrap,.uhero .pcover+.pav,.uhero .pcover+.avatar{margin-top:-42px;position:relative}
+.uhero .pcover{margin:-4px -16px 0}
+.pchips{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin:6px 0}
+.pchip{display:inline-flex;align-items:center;gap:5px;background:var(--bg2,#f0f3f8);border-radius:99px;padding:5px 11px;font-size:12.5px;color:var(--text)}
+/* ---- busca ---- */
+.srtabs{margin:8px 0}.srtabs button{flex:none}
+.srh{font-size:12px;color:var(--muted);margin:12px 0 6px;font-weight:600}
+.srp{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:8px 0;color:var(--text)}
+.srp b{display:block;font-size:14.5px}.srp small{display:block}
+.srpost{border:1px solid var(--line2);border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:14px}
+/* ---- telas vazias ---- */
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:26px 18px}
+.empty .emic{width:56px;height:56px;border-radius:50%;background:var(--bg2,#f0f3f8);color:var(--gold);display:flex;align-items:center;justify-content:center}
+.empty b{font-size:15.5px}.empty p{margin:0;color:var(--muted);font-size:13.5px}
+/* ---- calculadora e convite ---- */
+.calccard{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line2);border-left:4px solid var(--gold);border-radius:14px;padding:12px 14px;margin:0 0 12px;color:var(--text)}
+.calccard span:nth-child(2){flex:1}.calccard b{display:block;font-size:15px}.calccard small{display:block;color:var(--muted);font-size:12.5px}
+.chora{display:flex;justify-content:space-between;align-items:baseline;background:var(--bg2,#f0f3f8);border-radius:14px;padding:12px 14px;margin:12px 0 8px}.chora b{font-size:20px}
+.cres{border-radius:14px;padding:11px 14px;margin:8px 0;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.cres b{font-size:15px}.cres.bad{background:#fdecea;color:#8a1c14}.cres.good{background:#e6f6ec;color:#146c2e}
+html[data-theme=dark] .cres.bad{background:#3a1b19;color:#ffb4ac}html[data-theme=dark] .cres.good{background:#14301f;color:#9fe0b4}
+.invcard{display:flex;gap:14px;align-items:center;margin:8px 0 14px}.invcard img{border-radius:16px;flex:none}.invcard b{display:block;font-size:15.5px}.invcard p{margin:3px 0 0;font-size:13.5px;color:var(--muted)}
+#gsheet .btn+.btn,#gsheet .btn.wa{margin-top:8px}

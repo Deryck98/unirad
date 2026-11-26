@@ -37,6 +37,8 @@ const ICONS = {
   check: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
   alert: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
   flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  pin: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+  calc: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8.01" y2="11"/><line x1="12" y1="11" x2="12.01" y2="11"/><line x1="16" y1="11" x2="16.01" y2="11"/><line x1="8" y1="15" x2="8.01" y2="15"/><line x1="12" y1="15" x2="12.01" y2="15"/><line x1="16" y1="15" x2="16.01" y2="15"/><line x1="8" y1="19" x2="12" y2="19"/>',
   search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
   book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
@@ -54,6 +56,7 @@ const ICONS = {
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'
 };
+const emptyState = (icon, title, text, act = '', label = '') => `<div class="empty"><span class="emic">${ic(icon, 28)}</span><b>${title}</b><p>${text}</p>${act ? `<button class="btn out sm" data-action="${act}">${label}</button>` : ''}</div>`;
 const ic = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
 const CATS = { geral: 'Geral', vagas: 'Vagas', cursos: 'Cursos', enquete: 'Enquete', aviso: 'Aviso' };
 
@@ -168,6 +171,40 @@ function richText(text, names) {
   return (out + plain(h.slice(last))).replace(/\n/g, '<br>');
 }
 function mentionHtml(text, names) { return richText(text, names); }
+const SR_TABS = [['tudo', 'Tudo'], ['pessoas', 'Pessoas'], ['geral', 'Posts'], ['vagas', 'Vagas'], ['cursos', 'Cursos']];
+function srResults() {
+  const s = ui.sr; if (!s) return '';
+  if (s.q.trim().length < 2) return emptyState('search', 'Busque no UniRad', 'Pessoas, posts, vagas e cursos. Digite pelo menos 2 letras.');
+  if (s.busy && !s.res) return '<p class="muted small center pad8">Buscando…</p>';
+  const r = s.res || { people: [], posts: [] };
+  if (!r.people.length && !r.posts.length) return emptyState('search', 'Nada encontrado', 'Tente outra palavra ou outro nome.');
+  const ppl = r.people.length ? `<div class="srh">Pessoas</div>${r.people.map((u) => `<button class="srp" data-action="view-user" data-id="${u.id}">${avatar(u.name, u.avatar, 'sm')}<span><b>${esc(u.name)}${vbadge(u.verified)}</b><small class="muted">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}${u.workplace ? ' · ' + esc(u.workplace) : ''}</small></span></button>`).join('')}` : '';
+  const pst = r.posts.length ? `<div class="srh">Posts</div>${r.posts.map((p) => `<div class="srpost"><div class="muted small">${esc(CAT_NAME[p.cat] || 'Post')} · ${esc(p.author)} · ${ago(p.t)}</div><div>${esc(p.text)}</div></div>`).join('')}` : '';
+  return ppl + pst;
+}
+function modalSearch() {
+  const s = ui.sr || { q: '', type: 'tudo' };
+  return sheet('Buscar', `<div class="searchbar">${ic('search', 18)}<input id="srq" type="search" placeholder="Buscar pessoas, posts, vagas…" value="${esc(s.q)}" autocomplete="off" enterkeyhint="search"></div>
+    <div class="srtabs utabs">${SR_TABS.map(([v, l]) => `<button class="${s.type === v ? 'on' : ''}" data-action="sr-type" data-v="${v}">${l}</button>`).join('')}</div>
+    <div id="srres">${srResults()}</div>`);
+}
+let srT = null;
+function runSearch(delay = 280) {
+  const s = ui.sr; if (!s) return; clearTimeout(srT);
+  const paint = () => { const o = document.getElementById('srres'); if (o && ui.modal === 'search') o.innerHTML = srResults(); };
+  if (s.q.trim().length < 2) { s.res = null; return paint(); }
+  srT = setTimeout(async () => {
+    s.busy = true; const mine = s.q + '|' + s.type;
+    try { const r = await Store.search(s.q.trim(), s.type); if (s.q + '|' + s.type === mine) s.res = r; } catch { s.res = { people: [], posts: [] }; }
+    s.busy = false; paint();
+  }, delay);
+}
+function modalInvite() {
+  return sheet('Convidar colegas', `<div class="invcard"><img src="icons/og-square2.png" alt="UniRad" width="84" height="84"><div><b>Quanto mais colegas, mais força.</b><p>Chame quem trabalha com você. Só entra quem tem CRTR.</p></div></div>
+    <a class="btn wa big" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(INVITE())}">${ic('share', 20)} Enviar no WhatsApp</a>
+    <button class="btn out" data-action="invite-share">Outras opções</button>
+    <button class="btn out" data-action="copy-link" data-url="${esc(location.origin)}">${ic('copy', 18)} Copiar link</button>`);
+}
 function modalSharePost() {
   const p = ui.sharePost; if (!p) return '';
   const txt = `UniRad: ${String(p.text).slice(0, 140)}${p.text.length > 140 ? '…' : ''}\n${location.origin}`;
@@ -238,10 +275,10 @@ function commentsList(p) {
       <div class="cbody"><div class="cmeta">${c.authorId ? `<button class="cname" data-action="view-user" data-id="${c.authorId}"><b>${esc(c.author)}</b></button>` : `<b>${esc(c.author)}</b>`} <span class="muted">· ${ago(c.t)}</span></div>
         <div class="ctext">${mentionHtml(c.text, names)}</div>
         <div class="cacts">${api ? `<button data-action="reply" data-id="${c.id}" data-name="${esc(c.author)}">Responder</button>` : ''}${rs.length ? `<button data-action="toggle-replies" data-id="${c.id}">${ui.rep[c.id] ? 'Ocultar respostas' : `Ver ${rs.length} ${rs.length === 1 ? 'resposta' : 'respostas'}`}</button>` : ''}</div></div>
-      <div class="ccol">${c.mine && api ? `<button class="more cmore" data-action="menu-comment" data-pid="${p.id}" data-id="${c.id}" aria-label="Opções do comentário">${ic('dots', 18)}</button>` : ''}${api ? `<button class="clike ${c.liked ? 'liked' : ''}" data-action="like-comment" data-id="${c.id}" aria-label="Curtir comentário">${ic('bolt', 20)}<span>${c.likes || ''}</span></button>` : ''}</div>
+      <div class="ccol">${api ? `<button class="more cmore" data-action="menu-comment" data-pid="${p.id}" data-id="${c.id}" aria-label="Opções do comentário">${ic('dots', 18)}</button>` : ''}${api ? `<button class="clike ${c.liked ? 'liked' : ''}" data-action="like-comment" data-id="${c.id}" aria-label="Curtir comentário">${ic('bolt', 20)}<span>${c.likes || ''}</span></button>` : ''}</div>
     </div>${!isRep && ui.rep[c.id] ? rs.map((r) => one(r, true)).join('') : ''}`;
   };
-  return tops.map((c) => one(c, false)).join('') || '<div class="muted center pad8">Seja o primeiro a comentar.</div>';
+  return tops.map((c) => one(c, false)).join('') || emptyState('msg', 'Sem comentários ainda', 'Seja o primeiro a comentar.');
 }
 function modalComments() {
   const p = findPost((x) => x.id === ui.cpost);
@@ -302,11 +339,11 @@ function screenWelcome() {
     <h1>UniRad</h1>
     <p class="lead">${CONFIG.tagline}</p>
     <p class="muted center">A rede dos técnicos e tecnólogos em radiologia, por piso, jornada e salário em dia.</p>
-    <ul class="points">
-      <li>${ic('check', 20)} Só quem tem CRTR entra</li>
-      <li>${ic('check', 20)} Relatos anônimos se quiser</li>
-      <li>${ic('check', 20)} Sua região e o Brasil todo</li>
-    </ul>
+    <ol class="wsteps">
+      <li><span>1</span><div><b>Entre com seu CRTR</b><small>Só técnicos e tecnólogos de verdade</small></div></li>
+      <li><span>2</span><div><b>Compare salário e jornada</b><small>Anônimo, se quiser, da sua região</small></div></li>
+      <li><span>3</span><div><b>Una forças</b><small>Mural de atrasos, vagas e direitos</small></div></li>
+    </ol>
     <button class="btn big" data-action="go-signup">Criar meu cadastro</button>
     ${Store.mode === 'api' ? '<button class="btn out" data-action="go-login">Já tenho conta</button>' : ''}
     ${installBtn('btn out slim')}
@@ -797,6 +834,22 @@ async function finishRate() {
   ui.place = await Store.place(id); ui.ptab = 'resumo'; ui.modal = 'place'; render(); toast('Avaliação salva. Obrigado!');
 }
 
+const SM = 1621; /* salário mínimo 2026 (Decreto 12.797/2025) */
+function calcResult(sal, h) {
+  if (!(sal > 0) || !(h > 0)) return '<p class="muted small center">Digite seu salário e sua carga semanal.</p>';
+  const ref = SM * 2, hora = sal / (h * 4.345), brl = (n) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const jor = h > 24 ? `<div class="cres bad"><b>Jornada acima do limite</b><span>A lei fala em 24 h por semana. Você faz ${h} h: ${h - 24} h a mais.</span></div>` : '<div class="cres good"><b>Jornada dentro do limite</b><span>Até 24 h por semana, como a lei prevê.</span></div>';
+  const pis = sal < ref ? `<div class="cres bad"><b>${brl(ref - sal)} abaixo da referência</b><span>Referência: 2 salários mínimos = ${brl(ref)}.</span></div>` : `<div class="cres good"><b>Na referência ou acima</b><span>Referência: 2 salários mínimos = ${brl(ref)}.</span></div>`;
+  return `<div class="chora"><span>Sua hora vale</span><b>${brl(hora)}</b></div>${pis}${jor}<p class="muted small">Referência da Lei 7.394/85 (2 salários mínimos; jornada de 24 h). Há decisão do STF que mexeu na base de cálculo, então o valor devido pode ser outro. Confirme com o sindicato ou um advogado.</p>`;
+}
+function modalCalc() {
+  const c = ui.calc || (ui.calc = { sal: '', h: '' });
+  return sheet('Calculadora do piso', `<p class="muted small">Veja se o que você recebe bate com a lei.</p>
+    <label>Seu salário por mês (R$)<input id="calcSal" inputmode="decimal" placeholder="Ex.: 2400" value="${esc(c.sal)}" autocomplete="off"></label>
+    <label>Horas por semana<input id="calcH" inputmode="numeric" placeholder="Ex.: 36" value="${esc(c.h)}" autocomplete="off"></label>
+    <div id="calcOut">${calcResult(Number(String(c.sal).replace(',', '.')), Number(c.h))}</div>
+    <a class="btn wa" id="calcWa" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent('Faça a conta do seu piso no UniRad: ' + location.origin)}">${ic('share', 18)} Chamar colegas no WhatsApp</a>`);
+}
 const RIGHTS = [
   ['Jornada de trabalho', 'A Lei 7.394/1985 prevê jornada de 24 horas semanais para os profissionais das técnicas radiológicas. Se o seu contrato é diferente, anote horários e guarde comprovantes.'],
   ['Piso salarial', 'A mesma lei fala em salário mínimo profissional equivalente a 2 salários mínimos. Como esse piso é aplicado hoje é debatido na Justiça, então confirme com advogado trabalhista ou com o CRTR antes de cobrar.'],
@@ -805,6 +858,7 @@ const RIGHTS = [
 ];
 function screenRights() {
   return `<main class="pad">${pageHead('Direitos', 'Informativo geral, não é aconselhamento jurídico. Confira sempre o texto atual da lei.')}
+    <button class="calccard" data-action="open-calc"><span class="shic gold">${ic('calc', 22)}</span><span><b>Calculadora do piso</b><small>Veja se seu salário e sua jornada batem com a lei</small></span>${ic('chev', 18)}</button>
     <div class="list">${RIGHTS.map(([t, b]) => `<details class="acc2"><summary><span>${esc(t)}</span>${ic('chev', 18)}</summary><p>${esc(b)}</p></details>`).join('')}</div>
     <div class="list"><a class="lrow" target="_blank" rel="noopener" href="https://www.conter.gov.br"><span>CONTER e CRTRs<br><span class="muted small">No site do CONTER você encontra o CRTR da sua região.</span></span>${ic('chev', 18)}</a></div>
     ${conselhoSection()}
@@ -832,6 +886,7 @@ function profileForm(u) {
       <p class="muted small" style="margin-top:-4px">Pode ser só o primeiro nome, um apelido ou como preferir. Troca também nas suas publicações antigas (as anônimas continuam anônimas).</p>
       <p class="muted small">O resto é opcional. Só aparece para os outros membros quando você posta sem anonimato e alguém toca no seu nome. Seu CRTR, e-mail e senha nunca aparecem.</p>
       <label>Apresentação<input name="bio" maxlength="160" placeholder="Ex.: Técnico em radiologia há 8 anos, em Manaus" value="${esc(u.bio || '')}"></label>
+      <label>Onde trabalha<input name="workplace" maxlength="80" placeholder="Ex.: Hospital Delfina" value="${esc(u.workplace || '')}"></label>
       <label>Capacitações<textarea name="trainings" rows="3" maxlength="500" placeholder="Cursos e treinamentos (tomografia, ressonância, radioproteção…)">${esc(u.trainings || '')}</textarea></label>
       <label>Experiências<textarea name="experience" rows="3" maxlength="500" placeholder="Onde já atuou e em quais áreas">${esc(u.experience || '')}</textarea></label>
       <div class="error" id="formError" role="alert"></div>
@@ -856,11 +911,12 @@ function screenProfile() {
   const u = ui.user, api = Store.mode === 'api';
   const row = (act, label, cls = '') => `<button class="lrow ${cls}" data-action="${act}"><span>${label}</span>${ic('chev', 18)}</button>`;
   return `<main class="prof">
-    <section class="phero">
+    <section class="phero"><div class="pcover"></div>
       <div class="avwrap">${avatar(u.name, u.avatar, 'xl')}${api ? `<input type="file" id="avatarIn" accept="image/*" hidden><button class="avedit" data-action="change-avatar" aria-label="Trocar foto">${ic('camera', 16)}</button>` : ''}</div>
       <h2 class="pname">${esc(u.name)}${vbadge(u.verified)}</h2>
       <div class="muted">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}</div>
       ${u.bio ? `<p class="pbio">${esc(u.bio)}</p>` : ''}
+      ${u.workplace ? `<div class="pchips"><span class="pchip">${ic('pin', 14)} ${esc(u.workplace)}</span></div>` : ''}
       ${api && u.posts !== undefined ? `<div class="pstats"><div><b>${u.posts}</b><span>${u.posts === 1 ? 'post' : 'posts'}</span></div><div><b>${u.bolts}</b><span>${u.bolts === 1 ? 'raio' : 'raios'}</span></div></div>` : ''}
       <div class="prow"><button class="btn out" data-action="edit-profile">Editar perfil</button><button class="btn out" data-action="invite">Convidar</button></div>
     </section>
@@ -903,9 +959,9 @@ function modalUser() {
   const has = u.bio || u.trainings || u.experience;
   const list = ui.userPosts === null ? '<p class="muted small">Carregando…</p>' : ui.userPosts.length
     ? ui.userPosts.map((p) => `<div class="upost"><div class="muted small">${esc(CAT_NAME[p.cat] || 'Publicação')} · ${ago(p.t)}</div><div>${esc(p.text).slice(0, 220)}${p.text.length > 220 ? '…' : ''}</div></div>`).join('')
-    : '<p class="muted small">Nenhuma publicação aberta ainda.</p>';
-  return sheet(u.name, `<div class="uhero">${big}${who}
-    ${u.bio ? `<div class="ubio">${esc(u.bio)}</div>` : ''}
+    : emptyState('msg', 'Nada por aqui ainda', 'Quando essa pessoa publicar abertamente, aparece aqui.');
+  return sheet(u.name, `<div class="uhero"><div class="pcover"></div>${big}${who}
+    ${u.bio ? `<div class="ubio">${esc(u.bio)}</div>` : ''}${u.workplace ? `<div class="pchips"><span class="pchip">${ic('pin', 14)} ${esc(u.workplace)}</span></div>` : ''}
     <div class="ustats"><div><b>${u.posts}</b><span>posts</span></div><div><b id="ufollowers">${u.followers}</b><span>seguidores</span></div><div><b>${u.following}</b><span>seguindo</span></div></div>
     ${followBtn(u)}
   </div>
@@ -920,7 +976,7 @@ function modalNotifs() {
   const banner = pushSupported() && !ui.pushOn && (standalone() || !isIOS()) ? `<button class="btn out" data-action="enable-push" style="margin-bottom:8px">Ativar avisos no celular</button>` : '';
   if (!d) return sheet('Avisos', '<p class="muted small">Carregando…</p>');
   const row = (n) => `<${n.actorId ? 'button' : 'div'} class="nrow ${n.read ? '' : 'new'}" ${n.actorId ? `data-action="view-user" data-id="${n.actorId}"` : ''}><span class="nic">${ic(NIC[n.type] || 'bell', 18)}</span><span class="ntxt"><b>${esc(n.text)}</b>${n.snippet ? `<small class="muted">“${esc(n.snippet)}”</small>` : ''}<small class="muted">${ago(n.t)}</small></span>${n.read ? '' : '<i class="ndot"></i>'}</${n.actorId ? 'button' : 'div'}>`;
-  return sheet('Avisos', `${banner}${d.items.map(row).join('') || '<p class="muted small center">Nenhum aviso ainda. Quando alguém curtir, comentar ou seguir você, aparece aqui.</p>'}`);
+  return sheet('Avisos', `${banner}${d.items.map(row).join('') || emptyState('bell', 'Nenhum aviso ainda', 'Quando alguém curtir, comentar ou seguir você, aparece aqui.')}`);
 }
 function updateBell() {
   const b = document.getElementById('bbadge'); if (!b) return;
@@ -1082,7 +1138,7 @@ function nav() {
   return `<nav class="nav">${t('inicio', 'home', 'Início')}${t('atrasos', 'alert', 'Atrasos')}<button class="navplus" data-action="new-post" aria-label="Nova publicação">${ic('plus', 26)}</button>${t('direitos', 'shield', 'Direitos')}${t('perfil', 'user', 'Perfil')}</nav>`;
 }
 function header() {
-  return `<header class="top"><div class="row gap8">${logo(30)}<b class="brand">UniRad</b></div><div class="row gap8"><button class="ghost bell" data-action="quick-theme" aria-label="${document.documentElement.dataset.theme === 'dark' ? 'Mudar para modo claro' : 'Mudar para modo escuro'}">${ic(document.documentElement.dataset.theme === 'dark' ? 'sun' : 'moon', 24)}</button>${Store.mode === 'api' ? `<button class="ghost bell" data-action="open-notifs" aria-label="Avisos">${ic('bell', 24)}<span class="bbadge" id="bbadge" ${ui.user.unread ? '' : 'hidden'}>${ui.user.unread > 9 ? '9+' : ui.user.unread || ''}</span></button>` : ''}<button class="ghost" data-action="invite" aria-label="Convidar colegas">${ic('share', 22)}</button></div></header>`;
+  return `<header class="top"><div class="row gap8">${logo(30)}<b class="brand">UniRad</b></div><div class="row gap8">${Store.mode === 'api' ? `<button class="ghost bell" data-action="open-search" aria-label="Buscar">${ic('search', 24)}</button>` : ''}<button class="ghost bell" data-action="quick-theme" aria-label="${document.documentElement.dataset.theme === 'dark' ? 'Mudar para modo claro' : 'Mudar para modo escuro'}">${ic(document.documentElement.dataset.theme === 'dark' ? 'sun' : 'moon', 24)}</button>${Store.mode === 'api' ? `<button class="ghost bell" data-action="open-notifs" aria-label="Avisos">${ic('bell', 24)}<span class="bbadge" id="bbadge" ${ui.user.unread ? '' : 'hidden'}>${ui.user.unread > 9 ? '9+' : ui.user.unread || ''}</span></button>` : ''}<button class="ghost" data-action="invite" aria-label="Convidar colegas">${ic('share', 22)}</button></div></header>`;
 }
 /* ---- botão voltar do celular: volta uma tela dentro do app ---- */
 const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignorado */ } };
@@ -1115,7 +1171,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'pushhelp' ? modalPushHelp() : ui.modal === 'admin' ? modalAdmin() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'pushhelp' ? modalPushHelp() : ui.modal === 'search' ? modalSearch() : ui.modal === 'invite' ? modalInvite() : ui.modal === 'calc' ? modalCalc() : ui.modal === 'admin' ? modalAdmin() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom):not(.stv)'); if (ov) ov.classList.add('enter'); }
   ui.prevModal = ui.modal;
@@ -1529,8 +1585,11 @@ document.addEventListener('click', async (ev) => {
       return refresh({ quiet: true });
     }
     if (a === 'copy-link') { try { await navigator.clipboard.writeText(location.origin); toast('Link copiado.'); } catch { toast(location.origin); } return; }
-    if (a === 'invite') {
-      ev.preventDefault();
+    if (a === 'open-calc') return openModal('calc');
+    if (a === 'open-search') { ui.sr = { q: '', type: 'tudo', res: null, busy: false }; return openModal('search'); }
+    if (a === 'sr-type') { ui.sr.type = el.dataset.v; document.querySelectorAll('.srtabs button').forEach((b) => b.classList.toggle('on', b.dataset.v === ui.sr.type)); return runSearch(0); }
+    if (a === 'invite') { ev.preventDefault(); return openModal('invite'); }
+    if (a === 'invite-share') {
       if (navigator.share) { try { await navigator.share({ title: 'UniRad', text: INVITE() }); } catch { /* cancelado */ } return; }
       try { await navigator.clipboard.writeText(INVITE()); toast('Convite copiado. Cole no WhatsApp.'); } catch { toast(location.origin); }
       return;
@@ -1563,9 +1622,9 @@ document.addEventListener('click', async (ev) => {
     if (a === 'edit-profile') return openModal('editprofile');
     if (a === 'chip') { const sel = document.getElementById(el.dataset.for); sel.value = el.dataset.v; sel.dispatchEvent(new Event('change')); el.parentElement.querySelectorAll('.chip2').forEach((b) => b.classList.toggle('on', b === el)); return; }
     if (a === 'menu-post') { const p = findPost((x) => x.id === el.dataset.id); if (p) { ui.menu = { kind: 'post', id: p.id, mine: !!p.mine, text: p.text }; openModal('menu'); } return; }
-    if (a === 'menu-comment') { const p = findPost((x) => x.id === el.dataset.pid); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (c) { ui.menu = { kind: 'comment', id: c.id, mine: true, text: c.text }; openModal('menu'); } return; }
+    if (a === 'menu-comment') { const p = findPost((x) => x.id === el.dataset.pid); const c = p && p.comments.find((x) => x.id === el.dataset.id); if (c) { ui.menu = { kind: 'comment', id: c.id, mine: !!c.mine, text: c.text }; openModal('menu'); } return; }
     if (a === 'menu-edit') { const m = ui.menu; ui.editPost = { type: m.kind, id: m.id, text: m.text }; ui.modal = 'edit'; return render(); }
-    if (a === 'menu-report') { const m = ui.menu; closeModal(); if (confirm('Denunciar esta publicação por ofensa ou dados de paciente?')) { await Store.report(m.id); toast('Denúncia enviada. Obrigado.'); refresh({ quiet: true }); } return; }
+    if (a === 'menu-report') { const m = ui.menu; closeModal(); if (confirm(m.kind === 'comment' ? 'Denunciar este comentário por ofensa ou dados de paciente?' : 'Denunciar esta publicação por ofensa ou dados de paciente?')) { await (m.kind === 'comment' ? Store.reportComment(m.id) : Store.report(m.id)); toast('Denúncia enviada. Obrigado.'); refresh({ quiet: true }); } return; }
     if (a === 'menu-delete') {
       const m = ui.menu; closeModal();
       if (confirm(m.kind === 'comment' ? 'Apagar seu comentário?' : 'Apagar sua publicação?')) { await (m.kind === 'comment' ? Store.deleteComment(m.id) : Store.deletePost(m.id)); refresh({ quiet: true }); }
@@ -1715,7 +1774,7 @@ document.addEventListener('submit', async (ev) => {
     if (kind === 'profile') {
       const dn = String(d.get('dname') || '').trim().replace(/\s+/g, ' ');
       if (dn.length < 2) return err('Digite o nome que vai aparecer (mínimo 2 letras).');
-      const p = { name: dn, bio: String(d.get('bio') || '').trim(), trainings: String(d.get('trainings') || '').trim(), experience: String(d.get('experience') || '').trim() };
+      const p = { name: dn, bio: String(d.get('bio') || '').trim(), trainings: String(d.get('trainings') || '').trim(), experience: String(d.get('experience') || '').trim(), workplace: String(d.get('workplace') || '').trim() };
       busy(f, true);
       try { await Store.saveProfile(p); } finally { busy(f, false); }
       Object.assign(ui.user, p); toast('Perfil salvo.'); if (ui.modal === 'editprofile') closeModal();
@@ -1794,6 +1853,14 @@ document.addEventListener('input', (ev) => {
   if (!list.length) { ml.hidden = true; return; }
   ml.innerHTML = list.map((n) => `<button type="button" class="mrow" data-action="pick-mention" data-name="${esc(n)}">${avatar(n, null, 'sm')}<span>${esc(n)}</span></button>`).join('');
   ml.hidden = false;
+});
+document.addEventListener('input', (ev) => {
+  if (ev.target.id === 'srq' && ui.sr) { ui.sr.q = ev.target.value; ui.sr.res = null; runSearch(); return; }
+  if (ev.target.id === 'calcSal' || ev.target.id === 'calcH') {
+    const c = ui.calc || (ui.calc = {});
+    c.sal = document.getElementById('calcSal').value; c.h = document.getElementById('calcH').value;
+    const o = document.getElementById('calcOut'); if (o) o.innerHTML = calcResult(Number(String(c.sal).replace(',', '.')), Number(c.h));
+  }
 });
 let admT = null;
 document.addEventListener('input', (ev) => {
