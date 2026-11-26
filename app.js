@@ -837,10 +837,14 @@ async function finishRate() {
 const SM = 1621; /* salário mínimo 2026 (Decreto 12.797/2025) */
 function calcResult(sal, h) {
   if (!(sal > 0) || !(h > 0)) return '<p class="muted small center">Digite seu salário e sua carga semanal.</p>';
-  const ref = SM * 2, hora = sal / (h * 4.345), brl = (n) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const brl = (n) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const hora = sal / (h * 4.345), base = 545 * 2 * 1.4, hoje = SM * 2 * 1.4;
+  const cmp = (v, nome, nota) => `<div class="cres ${sal < v ? 'bad' : 'good'}"><b>${sal < v ? brl(v - sal) + ' abaixo' : 'Na referência ou acima'}</b><span>${nome}: ${brl(v)}. ${nota}</span></div>`;
   const jor = h > 24 ? `<div class="cres bad"><b>Jornada acima do limite</b><span>A lei fala em 24 h por semana. Você faz ${h} h: ${h - 24} h a mais.</span></div>` : '<div class="cres good"><b>Jornada dentro do limite</b><span>Até 24 h por semana, como a lei prevê.</span></div>';
-  const pis = sal < ref ? `<div class="cres bad"><b>${brl(ref - sal)} abaixo da referência</b><span>Referência: 2 salários mínimos = ${brl(ref)}.</span></div>` : `<div class="cres good"><b>Na referência ou acima</b><span>Referência: 2 salários mínimos = ${brl(ref)}.</span></div>`;
-  return `<div class="chora"><span>Sua hora vale</span><b>${brl(hora)}</b></div>${pis}${jor}<p class="muted small">Referência da Lei 7.394/85 (2 salários mínimos; jornada de 24 h). Há decisão do STF que mexeu na base de cálculo, então o valor devido pode ser outro. Confirme com o sindicato ou um advogado.</p>`;
+  return `<div class="chora"><span>Sua hora vale</span><b>${brl(hora)}</b></div>
+    ${cmp(base, 'Piso pela decisão do STF', '2 salários mínimos de 2011 (R$ 545) + 40% de insalubridade.')}
+    ${cmp(hoje, 'Se usasse o mínimo de hoje', '2 × R$ 1.621 + 40%. Isso é discutido na justiça, não é regra.')}${jor}
+    <p class="muted small">Lei 7.394/85 e ADPF 151 do STF. Convenção coletiva ou lei do seu estado pode fixar valor maior. Confirme com o sindicato ou o CRTR.</p>`;
 }
 function modalCalc() {
   const c = ui.calc || (ui.calc = { sal: '', h: '' });
