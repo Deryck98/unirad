@@ -179,7 +179,7 @@ function srResults() {
   const r = s.res || { people: [], posts: [] };
   if (!r.people.length && !r.posts.length) return emptyState('search', 'Nada encontrado', 'Tente outra palavra ou outro nome.');
   const ppl = r.people.length ? `<div class="srh">Pessoas</div>${r.people.map((u) => `<button class="srp" data-action="view-user" data-id="${u.id}">${avatar(u.name, u.avatar, 'sm')}<span><b>${esc(u.name)}${vbadge(u.verified)}</b><small class="muted">${esc(u.role)} · ${esc(regionLabel(u.region).split(' · ')[0])}${u.workplace ? ' · ' + esc(u.workplace) : ''}</small></span></button>`).join('')}` : '';
-  const pst = r.posts.length ? `<div class="srh">Posts</div>${r.posts.map((p) => `<div class="srpost"><div class="muted small">${esc(CAT_NAME[p.cat] || 'Post')} · ${esc(p.author)} · ${ago(p.t)}</div><div>${esc(p.text)}</div></div>`).join('')}` : '';
+  const pst = r.posts.length ? `<div class="srh">Posts</div>${r.posts.map((p) => `<button class="srpost" data-action="sr-post" data-id="${p.id}"><div class="muted small">${esc(CAT_NAME[p.cat] || 'Post')} · ${esc(p.author)} · ${ago(p.t)}</div><div>${esc(p.text.length > 140 ? p.text.slice(0, 140) + '…' : p.text)}</div></button>`).join('')}` : '';
   return ppl + pst;
 }
 function modalSearch() {
@@ -198,6 +198,10 @@ function runSearch(delay = 280) {
     try { const r = await Store.search(s.q.trim(), s.type); if (s.q + '|' + s.type === mine) s.res = r; } catch { s.res = { people: [], posts: [] }; }
     s.busy = false; paint();
   }, delay);
+}
+function modalSrPost() {
+  const p = ui.srPost; if (!p) return '';
+  return sheet(CAT_NAME[p.cat] || 'Publicação', `<div class="muted small">${esc(p.author)} · ${ago(p.t)}</div><p class="srfull">${esc(p.text).replace(/\n/g, '<br>')}</p>`);
 }
 function modalInvite() {
   return sheet('Convidar colegas', `<div class="invcard"><img src="icons/og-square2.png" alt="UniRad" width="84" height="84"><div><b>Quanto mais colegas, mais força.</b><p>Chame quem trabalha com você. Só entra quem tem CRTR.</p></div></div>
@@ -594,7 +598,7 @@ function screenHome() {
     ${shortcuts()}
     ${viewSwitch(Store.mode === 'api')}
     ${composer()}
-    ${!ui.posts ? loadingBox : ui.posts.map(postCard).join('') || (ui.view === 'seguindo' ? '<p class="muted center pad8">Você ainda não segue ninguém. Toque no nome de um colega e escolha Seguir para ver as publicações dele aqui.</p>' : '<p class="muted center pad8">Nada por aqui ainda. Seja o primeiro a publicar.</p>')}
+    ${!ui.posts ? loadingBox : ui.posts.map(postCard).join('') || (ui.view === 'seguindo' ? emptyState('users', 'Você ainda não segue ninguém', 'Toque no nome de um colega e escolha Seguir para ver as publicações dele aqui.', 'open-search', 'Buscar colegas') : emptyState('msg', 'Nada por aqui ainda', 'Seja o primeiro a publicar nesta região.', 'new-post', 'Publicar agora'))}
     ${ui.more ? '<button class="btn out" data-action="load-more">Ver mais publicações</button>' : ''}
   </main>`;
 }
@@ -681,7 +685,7 @@ function entityList() {
   if (q) list = list.filter((e) => normQ(e.name).includes(q));
   if (ui.asort === 'alertas') list = list.filter((e) => e.crit > 0).sort((a, b) => b.crit - a.crit);
   else if (ui.asort === 'melhores') list = list.filter((e) => e.geral != null).sort((a, b) => b.geral - a.geral);
-  return list.map((e) => entityCard(comp ? 'company' : 'place', e)).join('') || `<p class="muted small center pad8">${q ? 'Nada encontrado. Toque em "Avaliar" para cadastrar.' : comp ? 'Nenhuma empresa avaliada ainda.' : 'Nenhum local avaliado aqui ainda.'}</p>`;
+  return list.map((e) => entityCard(comp ? 'company' : 'place', e)).join('') || (q ? emptyState('search', 'Nada encontrado', 'Toque em "Avaliar" para cadastrar.') : emptyState('shield', comp ? 'Nenhuma empresa avaliada' : 'Nenhum local avaliado', 'Sua avaliação ajuda os colegas. Toque em "Avaliar" para começar.'));
 }
 function avalSection() {
   const comp = ui.atab === 'empresas';
@@ -909,7 +913,7 @@ function myPostsSection() {
   const list = ui.myPosts;
   if (!list) loadMyPosts();
   return `<h4 class="usec" style="margin:16px 4px 6px">Suas publicações</h4>
-    <div class="myposts">${!list ? '<p class="muted small center pad8">Carregando…</p>' : list.map(postCard).join('') || '<p class="muted small center pad8">Suas publicações abertas aparecem aqui.</p>'}</div>`;
+    <div class="myposts">${!list ? '<p class="muted small center pad8">Carregando…</p>' : list.map(postCard).join('') || emptyState('msg', 'Nenhuma publicação ainda', 'Suas publicações abertas aparecem aqui.', 'new-post', 'Publicar agora')}</div>`;
 }
 function screenProfile() {
   const u = ui.user, api = Store.mode === 'api';
@@ -1149,7 +1153,7 @@ const pushH = () => { try { history.pushState({ u: 1 }, ''); } catch { /* ignora
 const popSilently = () => { ui.skipPop = 1; history.back(); };
 function openModal(m) { ui.modal = m; pushH(); render(); }
 function openOver(m) { (ui.stk = ui.stk || []).push(ui.modal); openModal(m); }
-function backModal() { if (ui.modal === 'zoom' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'pick' || ui.modal === 'rate' || ui.modal === 'link' || ui.modal === 'council' || ui.modal === 'demands' || ui.modal === 'dnew') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
+function backModal() { if (ui.modal === 'zoom' || ui.modal === 'srpost' || ui.modal === 'user' || ui.modal === 'place' || ui.modal === 'company' || ui.modal === 'pick' || ui.modal === 'rate' || ui.modal === 'link' || ui.modal === 'council' || ui.modal === 'demands' || ui.modal === 'dnew') return (ui.stk || []).pop() || null; return (ui.modal === 'menu' || ui.modal === 'edit') && ui.menu && ui.menu.kind === 'comment' && ui.cpost ? 'comments' : null; }
 function closeModal() { if (ui.modal) { ui.modal = backModal(); if (!ui.modal) ui.stk = []; popSilently(); } render(); }
 function openRootModal(html) { document.getElementById('modalRoot').innerHTML = html; ui.rootModal = true; pushH(); }
 function closeRootModal() { document.getElementById('modalRoot').innerHTML = ''; if (ui.rootModal) { ui.rootModal = false; popSilently(); } }
@@ -1175,7 +1179,7 @@ function render() {
     return;
   }
   const body = { inicio: screenHome, atrasos: screenDelays, direitos: screenRights, perfil: screenProfile }[ui.tab]();
-  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'pushhelp' ? modalPushHelp() : ui.modal === 'search' ? modalSearch() : ui.modal === 'invite' ? modalInvite() : ui.modal === 'calc' ? modalCalc() : ui.modal === 'admin' ? modalAdmin() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
+  const modal = ui.modal === 'delay' ? modalDelay() : ui.modal === 'post' ? modalPost() : ui.modal === 'terms' ? sheet('Regras do UniRad', TERMS) : ui.modal === 'delete' ? modalDeleteAccount() : ui.modal === 'install' ? modalInstall() : ui.modal === 'user' && ui.viewUser ? modalUser() : ui.modal === 'followers' ? modalFollowers() : ui.modal === 'notifs' ? modalNotifs() : ui.modal === 'place' ? modalPlace() : ui.modal === 'company' ? modalCompany() : ui.modal === 'rate' ? modalRate() : ui.modal === 'pick' ? modalPick() : ui.modal === 'announce' ? modalAnnounce() : ui.modal === 'council' ? modalCouncil() : ui.modal === 'demands' ? modalDemands() : ui.modal === 'dnew' ? modalDemandNew() : ui.modal === 'link' ? modalLink() : ui.modal === 'sharepost' ? modalSharePost() : ui.modal === 'story' ? modalStory() : ui.modal === 'pushhelp' ? modalPushHelp() : ui.modal === 'search' ? modalSearch() : ui.modal === 'srpost' ? modalSrPost() : ui.modal === 'invite' ? modalInvite() : ui.modal === 'calc' ? modalCalc() : ui.modal === 'admin' ? modalAdmin() : ui.modal === 'snew' ? modalStoryNew() : ui.modal === 'edit' && ui.editPost ? sheet(ui.editPost.type === 'comment' ? 'Editar comentário' : 'Editar publicação', `<form data-form="edit" data-type="${ui.editPost.type}" data-id="${ui.editPost.id}" novalidate><label>Texto<textarea name="text" rows="${ui.editPost.type === 'comment' ? 3 : 6}" maxlength="${ui.editPost.type === 'comment' ? 300 : 800}" required>${esc(ui.editPost.text)}</textarea></label>${ui.editPost.type === 'comment' ? '' : '<p class="muted small">Só o texto pode ser editado. Foto e enquete continuam como estão.</p>'}<div class="error" id="formError" role="alert"></div><div class="row gap8"><button type="button" class="btn out" data-action="close-modal">Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>`) : ui.modal === 'comments' ? modalComments() : ui.modal === 'editprofile' ? modalEditProfile() : ui.modal === 'menu' && ui.menu ? menuSheet() : ui.modal === 'zoom' ? `<div class="overlay zoom" data-action="close-modal"><img src="${esc(ui.zoomSrc)}" alt="Foto ampliada">${ui.zoomUid ? `<button class="zprof" data-action="zoom-profile" data-id="${ui.zoomUid}">Ver perfil</button>` : ''}<button class="zclose" data-action="close-modal" aria-label="Fechar">${ic('x', 26)}</button></div>` : '';
   $app.innerHTML = `<div class="shell">${nav()}<div class="col">${header()}${body}</div></div>${modal}`;
   if (ui.modal && ui.modal !== ui.prevModal) { const ov = $app.querySelector('.overlay:not(.zoom):not(.stv)'); if (ov) ov.classList.add('enter'); }
   ui.prevModal = ui.modal;
@@ -1591,6 +1595,7 @@ document.addEventListener('click', async (ev) => {
     if (a === 'copy-link') { try { await navigator.clipboard.writeText(location.origin); toast('Link copiado.'); } catch { toast(location.origin); } return; }
     if (a === 'open-calc') return openModal('calc');
     if (a === 'open-search') { ui.sr = { q: '', type: 'tudo', res: null, busy: false }; return openModal('search'); }
+    if (a === 'sr-post') { const p = ui.sr && ui.sr.res && ui.sr.res.posts.find((x) => x.id === el.dataset.id); if (p) { ui.srPost = p; openOver('srpost'); } return; }
     if (a === 'sr-type') { ui.sr.type = el.dataset.v; document.querySelectorAll('.srtabs button').forEach((b) => b.classList.toggle('on', b.dataset.v === ui.sr.type)); return runSearch(0); }
     if (a === 'invite') { ev.preventDefault(); return openModal('invite'); }
     if (a === 'invite-share') {

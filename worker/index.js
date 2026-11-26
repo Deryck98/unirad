@@ -223,7 +223,7 @@ async function searchAll(url, env, user) {
          AND ((SELECT is_private FROM users uu WHERE uu.id = p.user_id) = 0 OR p.user_id = ? OR EXISTS (SELECT 1 FROM follows ff WHERE ff.follower_id = ? AND ff.followee_id = p.user_id AND ff.status = 'ok'))
        ORDER BY p.created_at DESC LIMIT 15`
     ).bind(...[like, user.region, ...(cat ? [cat] : []), user.id, user.id]).all();
-    out.posts = r.results.map((p) => ({ id: p.id, cat: p.cat, author: p.anon ? 'Profissional anônimo' : p.author_name, text: String(p.text).slice(0, 160), t: p.created_at }));
+    out.posts = r.results.map((p) => ({ id: p.id, cat: p.cat, author: p.anon ? 'Profissional anônimo' : p.author_name, text: String(p.text), t: p.created_at }));
   }
   return json(out);
 }

@@ -920,3 +920,16 @@ html[data-theme=dark] .atrk div{background:var(--gold)}
 html[data-theme=dark] .cres.bad{background:#3a1b19;color:#ffb4ac}html[data-theme=dark] .cres.good{background:#14301f;color:#9fe0b4}
 .invcard{display:flex;gap:14px;align-items:center;margin:8px 0 14px}.invcard img{border-radius:16px;flex:none}.invcard b{display:block;font-size:15.5px}.invcard p{margin:3px 0 0;font-size:13.5px;color:var(--muted)}
 #gsheet .btn+.btn,#gsheet .btn.wa{margin-top:8px}
+/* ---- revisão de design ---- */
+.phero{background:var(--card);border:1px solid var(--line2);border-radius:18px;margin:0 0 6px;padding:0 14px 12px;overflow:hidden}
+html[data-theme=dark] .phero{background:var(--card)}
+.phero .pcover{height:96px;margin:0 -14px;border-radius:0;background:linear-gradient(135deg,#0b1f3a 0%,#1d4f8f 70%,#f5b301 190%)}
+.phero .avwrap{margin-top:-46px}.phero .avwrap .avatar{border:4px solid var(--card)}
+.uhero .pcover{height:80px;border-radius:14px;margin:0 0 -40px;width:100%;background:linear-gradient(135deg,#0b1f3a 0%,#1d4f8f 70%,#f5b301 190%)}
+.uhero .pav .avatar,.uhero>.avatar{border:4px solid var(--card)}
+.srpost{display:block;width:100%;text-align:left;background:var(--card);color:var(--text)}
+.srfull{font-size:15.5px;line-height:1.5;margin:10px 0 4px}
+@media(max-width:340px){.top .ghost{padding:6px}.top .row.gap8{gap:2px}}
+.top .row.gap8{gap:4px}
+html[data-theme=dark] .pchip,html[data-theme=dark] .empty .emic,html[data-theme=dark] .chora{background:#1b2538;color:#e8edf6}
+html[data-theme=dark] .empty .emic{color:var(--gold)}
