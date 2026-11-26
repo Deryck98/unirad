@@ -933,3 +933,6 @@ html[data-theme=dark] .phero{background:var(--card)}
 .top .row.gap8{gap:4px}
 html[data-theme=dark] .pchip,html[data-theme=dark] .empty .emic,html[data-theme=dark] .chora{background:#1b2538;color:#e8edf6}
 html[data-theme=dark] .empty .emic{color:var(--gold)}
+.cres.plain{background:var(--bg2,#f0f3f8);color:var(--text)}html[data-theme=dark] .cres.plain{background:#1b2538;color:#e8edf6}
+.money{font-weight:700;letter-spacing:.2px}
+#gsheet .utabs{margin:6px 0 10px}

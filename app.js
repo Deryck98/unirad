@@ -844,19 +844,38 @@ function calcResult(sal, h) {
   const brl = (n) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const hora = sal / (h * 4.345), base = 545 * 2 * 1.4, hoje = SM * 2 * 1.4;
   const cmp = (v, nome, nota) => `<div class="cres ${sal < v ? 'bad' : 'good'}"><b>${sal < v ? brl(v - sal) + ' abaixo' : 'Na referência ou acima'}</b><span>${nome}: ${brl(v)}. ${nota}</span></div>`;
-  const jor = h > 24 ? `<div class="cres bad"><b>Jornada acima do limite</b><span>A lei fala em 24 h por semana. Você faz ${h} h: ${h - 24} h a mais.</span></div>` : '<div class="cres good"><b>Jornada dentro do limite</b><span>Até 24 h por semana, como a lei prevê.</span></div>';
+  const jor = h > 24 ? `<div class="cres bad"><b>Jornada acima do limite</b><span>A lei fala em 24 h por semana. Você faz cerca de ${Number(h.toFixed(1)).toLocaleString('pt-BR')} h: ${Number((h - 24).toFixed(1)).toLocaleString('pt-BR')} h a mais.</span></div>` : '<div class="cres good"><b>Jornada dentro do limite</b><span>Até 24 h por semana, como a lei prevê.</span></div>';
   return `<div class="chora"><span>Sua hora vale</span><b>${brl(hora)}</b></div>
     ${cmp(base, 'Piso pela decisão do STF', '2 salários mínimos de 2011 (R$ 545) + 40% de insalubridade.')}
     ${cmp(hoje, 'Se usasse o mínimo de hoje', '2 × R$ 1.621 + 40%. Isso é discutido na justiça, não é regra.')}${jor}
     <p class="muted small">Lei 7.394/85 e ADPF 151 do STF. Convenção coletiva ou lei do seu estado pode fixar valor maior. Confirme com o sindicato ou o CRTR.</p>`;
 }
+const brMask = (d) => { d = String(d).replace(/\D/g, '').replace(/^0+/, '').slice(0, 9); return d ? (Number(d) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''; };
+const brNum = (d) => Number(String(d).replace(/\D/g, '') || 0) / 100;
+function calcOutHtml() {
+  const c = ui.calc;
+  if (c.mode === 'plantao') {
+    const n = Number(c.n) || 0, v = brNum(c.v), dur = Number(c.dur) || 12;
+    if (!n || !v) return '<p class="muted small center">Digite quantos plantões você faz e quanto recebe por plantão.</p>';
+    const tot = n * v, hs = (n * dur) / 4.345;
+    return `<div class="cres plain"><b>${n} ${n === 1 ? 'plantão' : 'plantões'} de ${dur} h = ${(n * dur).toLocaleString('pt-BR')} h por mês</b><span>Total no mês: R$ ${tot.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · cerca de ${hs.toFixed(1).replace('.', ',')} h por semana</span></div>${calcResult(tot, hs)}`;
+  }
+  return calcResult(brNum(c.sal), Number(c.h));
+}
 function modalCalc() {
-  const c = ui.calc || (ui.calc = { sal: '', h: '' });
-  return sheet('Calculadora do piso', `<p class="muted small">Veja se o que você recebe bate com a lei.</p>
-    <label>Seu salário por mês (R$)<input id="calcSal" inputmode="decimal" placeholder="Ex.: 2400" value="${esc(c.sal)}" autocomplete="off"></label>
-    <label>Horas por semana<input id="calcH" inputmode="numeric" placeholder="Ex.: 36" value="${esc(c.h)}" autocomplete="off"></label>
-    <div id="calcOut">${calcResult(Number(String(c.sal).replace(',', '.')), Number(c.h))}</div>
-    <a class="btn wa" id="calcWa" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent('Faça a conta do seu piso no UniRad: ' + location.origin)}">${ic('share', 18)} Chamar colegas no WhatsApp</a>`);
+  const c = ui.calc || (ui.calc = { mode: 'fixo', sal: '', h: '', n: '', v: '', dur: 12, esc: '' });
+  const tabs = `<div class="utabs">${[['fixo', 'Salário fixo'], ['plantao', 'Por plantão']].map(([k, l]) => `<button class="${c.mode === k ? 'on' : ''}" data-action="calc-mode" data-v="${k}">${l}</button>`).join('')}</div>`;
+  const form = c.mode === 'plantao'
+    ? `<div class="muted small" style="margin:2px 0 6px">Qual é a sua escala? (horas de trabalho por horas de folga)</div><div class="chips" id="calcEsc">${['12x36', '12x48', '24x48', '24x72', 'outra'].map((k) => `<button type="button" class="chip2 ${c.esc === k ? 'on' : ''}" data-action="calc-esc" data-v="${k}">${k === 'outra' ? 'Outra' : k.replace('x', ' por ')}</button>`).join('')}</div>
+       <p class="muted small" style="margin:6px 0 0">${c.esc && c.esc !== 'outra' ? `Escala ${c.esc.replace('x', ' h de trabalho e ')} h de folga: dá cerca de ${c.n} plantões em 30 dias. Ajuste se o seu mês for diferente.` : 'Escolha a escala ou preencha abaixo.'}</p>
+       <label>Quantos plantões por mês<input id="calcN" inputmode="numeric" maxlength="2" placeholder="Ex.: 10" value="${esc(c.n)}" autocomplete="off"></label>
+       <label>Valor de cada plantão<input id="calcV" class="money" inputmode="numeric" placeholder="R$ 0,00" value="${c.v ? 'R$ ' + brMask(c.v) : ''}" autocomplete="off"></label>
+       <div class="muted small" style="margin:4px 0 6px">Duração do plantão</div><div class="chips" id="calcDur">${[6, 12, 24].map((d) => `<button type="button" class="chip2 ${Number(c.dur) === d ? 'on' : ''}" data-action="calc-dur" data-v="${d}">${d} h</button>`).join('')}</div>`
+    : `<label>Seu salário por mês<input id="calcSal" class="money" inputmode="numeric" placeholder="R$ 0,00" value="${c.sal ? 'R$ ' + brMask(c.sal) : ''}" autocomplete="off"></label>
+       <label>Horas por semana<input id="calcH" inputmode="numeric" maxlength="2" placeholder="Ex.: 24" value="${esc(c.h)}" autocomplete="off"></label>`;
+  return sheet('Calculadora do piso', `<p class="muted small">Veja se o que você recebe bate com a lei.</p>${tabs}${form}
+    <div id="calcOut">${calcOutHtml()}</div>
+    <a class="btn wa" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent('Faça a conta do seu piso no UniRad: ' + location.origin)}">${ic('share', 18)} Chamar colegas no WhatsApp</a>`);
 }
 const RIGHTS = [
   ['Jornada de trabalho', 'A Lei 7.394/1985 prevê jornada de 24 horas semanais para os profissionais das técnicas radiológicas. Se o seu contrato é diferente, anote horários e guarde comprovantes.'],
@@ -1594,6 +1613,13 @@ document.addEventListener('click', async (ev) => {
     }
     if (a === 'copy-link') { try { await navigator.clipboard.writeText(location.origin); toast('Link copiado.'); } catch { toast(location.origin); } return; }
     if (a === 'open-calc') return openModal('calc');
+    if (a === 'calc-mode') { ui.calc.mode = el.dataset.v; return render(); }
+    if (a === 'calc-esc') {
+      const k = el.dataset.v; ui.calc.esc = k;
+      if (k !== 'outra') { const [w, r] = k.split('x').map(Number); ui.calc.dur = w; ui.calc.n = String(Math.round(720 / (w + r))); }
+      return render();
+    }
+    if (a === 'calc-dur') { ui.calc.dur = Number(el.dataset.v); document.querySelectorAll('#calcDur .chip2').forEach((b) => b.classList.toggle('on', b.dataset.v === el.dataset.v)); const out = document.getElementById('calcOut'); if (out) out.innerHTML = calcOutHtml(); return; }
     if (a === 'open-search') { ui.sr = { q: '', type: 'tudo', res: null, busy: false }; return openModal('search'); }
     if (a === 'sr-post') { const p = ui.sr && ui.sr.res && ui.sr.res.posts.find((x) => x.id === el.dataset.id); if (p) { ui.srPost = p; openOver('srpost'); } return; }
     if (a === 'sr-type') { ui.sr.type = el.dataset.v; document.querySelectorAll('.srtabs button').forEach((b) => b.classList.toggle('on', b.dataset.v === ui.sr.type)); return runSearch(0); }
@@ -1865,10 +1891,11 @@ document.addEventListener('input', (ev) => {
 });
 document.addEventListener('input', (ev) => {
   if (ev.target.id === 'srq' && ui.sr) { ui.sr.q = ev.target.value; ui.sr.res = null; runSearch(); return; }
-  if (ev.target.id === 'calcSal' || ev.target.id === 'calcH') {
-    const c = ui.calc || (ui.calc = {});
-    c.sal = document.getElementById('calcSal').value; c.h = document.getElementById('calcH').value;
-    const o = document.getElementById('calcOut'); if (o) o.innerHTML = calcResult(Number(String(c.sal).replace(',', '.')), Number(c.h));
+  if (['calcSal', 'calcH', 'calcN', 'calcV'].includes(ev.target.id) && ui.calc) {
+    const c = ui.calc, t = ev.target;
+    if (t.id === 'calcSal' || t.id === 'calcV') { const d = t.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9); c[t.id === 'calcSal' ? 'sal' : 'v'] = d; t.value = d ? 'R$ ' + brMask(d) : ''; }
+    else { c[t.id === 'calcH' ? 'h' : 'n'] = t.value.replace(/\D/g, '').slice(0, 2); t.value = c[t.id === 'calcH' ? 'h' : 'n']; }
+    const out = document.getElementById('calcOut'); if (out) out.innerHTML = calcOutHtml();
   }
 });
 let admT = null;
